@@ -8,8 +8,15 @@ import 'category_badge.dart';
 
 class NewsCard extends ConsumerWidget {
   final NewsItem item;
+  final List<NewsItem> allItems;
+  final int index;
 
-  const NewsCard({super.key, required this.item});
+  const NewsCard({
+    super.key,
+    required this.item,
+    required this.allItems,
+    required this.index,
+  });
 
   String _formatTime(DateTime dt) {
     final diff = DateTime.now().difference(dt);
@@ -39,14 +46,18 @@ class NewsCard extends ConsumerWidget {
         borderRadius: BorderRadius.circular(12),
         onTap: () => Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => ItemDetailScreen(item: item)),
+          MaterialPageRoute(
+            builder: (_) => ItemDetailScreen(
+              items: allItems,
+              initialIndex: index,
+            ),
+          ),
         ),
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Ongelezen indicator
               Padding(
                 padding: const EdgeInsets.only(top: 6, right: 10),
                 child: AnimatedContainer(
@@ -85,9 +96,8 @@ class NewsCard extends ConsumerWidget {
                     Text(
                       item.title,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: isRead
-                                ? FontWeight.normal
-                                : FontWeight.w600,
+                            fontWeight:
+                                isRead ? FontWeight.normal : FontWeight.w600,
                             color: isRead ? Colors.grey[600] : null,
                           ),
                     ),
@@ -97,7 +107,8 @@ class NewsCard extends ConsumerWidget {
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: isRead ? Colors.grey[400] : Colors.grey[600],
+                            color:
+                                isRead ? Colors.grey[400] : Colors.grey[600],
                             height: 1.4,
                           ),
                     ),

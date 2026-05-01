@@ -19,19 +19,24 @@ class NewsFeedScreen extends ConsumerWidget {
         title: const Text('Nieuws'),
         centerTitle: false,
         actions: [
-          if (readCount > 0)
-            TextButton.icon(
-              onPressed: () =>
-                  ref.read(showReadProvider.notifier).state = !showRead,
-              icon: Icon(
-                showRead ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                size: 18,
-              ),
-              label: Text(
-                showRead ? 'Verberg gelezen' : 'Gelezen ($readCount)',
-                style: const TextStyle(fontSize: 13),
-              ),
+          TextButton.icon(
+            onPressed: () =>
+                ref.read(showReadProvider.notifier).state = !showRead,
+            icon: Icon(
+              showRead
+                  ? Icons.visibility_off_outlined
+                  : Icons.visibility_outlined,
+              size: 18,
             ),
+            label: Text(
+              showRead
+                  ? 'Verberg gelezen'
+                  : readCount > 0
+                      ? 'Gelezen ($readCount)'
+                      : 'Gelezen',
+              style: const TextStyle(fontSize: 13),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.settings_outlined),
             tooltip: 'Instellingen',
@@ -55,7 +60,11 @@ class NewsFeedScreen extends ConsumerWidget {
               child: ListView.builder(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 itemCount: items.length,
-                itemBuilder: (context, index) => NewsCard(item: items[index]),
+                itemBuilder: (context, index) => NewsCard(
+                  item: items[index],
+                  allItems: items,
+                  index: index,
+                ),
               ),
             ),
     );
