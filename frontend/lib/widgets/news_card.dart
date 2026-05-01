@@ -22,6 +22,8 @@ class NewsCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final feedback = ref.watch(feedbackProvider);
     final liked = feedback[item.id];
+    final readItems = ref.watch(readItemsProvider);
+    final isRead = readItems.contains(item.id);
     final categories = ref.watch(settingsProvider);
     final category = categories.firstWhere(
       (c) => c.id == item.category,
@@ -30,80 +32,106 @@ class NewsCard extends ConsumerWidget {
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      elevation: 1,
+      elevation: isRead ? 0 : 1,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      color: isRead ? Colors.grey[50] : null,
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: () => Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (_) => ItemDetailScreen(item: item),
-          ),
+          MaterialPageRoute(builder: (_) => ItemDetailScreen(item: item)),
         ),
         child: Padding(
           padding: const EdgeInsets.all(14),
-          child: Column(
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  CategoryBadge(
-                    categoryId: item.category,
-                    categoryName: category.name,
+              // Ongelezen indicator
+              Padding(
+                padding: const EdgeInsets.only(top: 6, right: 10),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isRead
+                        ? Colors.transparent
+                        : Theme.of(context).colorScheme.primary,
                   ),
-                  const Spacer(),
-                  Text(
-                    _formatTime(item.timestamp),
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.grey[500],
+                ),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        CategoryBadge(
+                          categoryId: item.category,
+                          categoryName: category.name,
                         ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                item.title,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                item.summary,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.grey[600],
-                      height: 1.4,
-                    ),
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Text(
-                    item.source,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.grey[500],
-                          fontStyle: FontStyle.italic,
+                        const Spacer(),
+                        Text(
+                          _formatTime(item.timestamp),
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: Colors.grey[500],
+                                  ),
                         ),
-                  ),
-                  const Spacer(),
-                  _FeedbackButton(
-                    icon: '👍',
-                    active: liked == true,
-                    onTap: () => ref
-                        .read(feedbackProvider.notifier)
-                        .setFeedback(item.id, true),
-                  ),
-                  const SizedBox(width: 4),
-                  _FeedbackButton(
-                    icon: '👎',
-                    active: liked == false,
-                    onTap: () => ref
-                        .read(feedbackProvider.notifier)
-                        .setFeedback(item.id, false),
-                  ),
-                ],
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      item.title,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: isRead
+                                ? FontWeight.normal
+                                : FontWeight.w600,
+                            color: isRead ? Colors.grey[600] : null,
+                          ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      item.summary,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: isRead ? Colors.grey[400] : Colors.grey[600],
+                            height: 1.4,
+                          ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Text(
+                          item.source,
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: Colors.grey[500],
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                        ),
+                        const Spacer(),
+                        _FeedbackButton(
+                          icon: '👍',
+                          active: liked == true,
+                          onTap: () => ref
+                              .read(feedbackProvider.notifier)
+                              .setFeedback(item.id, true),
+                        ),
+                        const SizedBox(width: 4),
+                        _FeedbackButton(
+                          icon: '👎',
+                          active: liked == false,
+                          onTap: () => ref
+                              .read(feedbackProvider.notifier)
+                              .setFeedback(item.id, false),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ],
           ),

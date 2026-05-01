@@ -7,20 +7,34 @@ import '../providers/news_provider.dart';
 import '../providers/settings_provider.dart';
 import '../widgets/category_badge.dart';
 
-class ItemDetailScreen extends ConsumerWidget {
+class ItemDetailScreen extends ConsumerStatefulWidget {
   final NewsItem item;
 
   const ItemDetailScreen({super.key, required this.item});
+
+  @override
+  ConsumerState<ItemDetailScreen> createState() => _ItemDetailScreenState();
+}
+
+class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Item markeren als gelezen zodra het scherm opent
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(readItemsProvider.notifier).markRead(widget.item.id);
+    });
+  }
 
   String _formatDateTime(DateTime dt) {
     return '${dt.day}-${dt.month}-${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
   }
 
-  Future<void> _openUrl(BuildContext context) async {
-    final uri = Uri.parse(item.url);
+  Future<void> _openUrl() async {
+    final uri = Uri.parse(widget.item.url);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else if (context.mounted) {
+    } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Kan de link niet openen')),
       );
@@ -28,12 +42,12 @@ class ItemDetailScreen extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final feedback = ref.watch(feedbackProvider);
-    final liked = feedback[item.id];
+    final liked = feedback[widget.item.id];
     final categories = ref.watch(settingsProvider);
     final category = categories.firstWhere(
-      (c) => c.id == item.category,
+      (c) => c.id == widget.item.category,
       orElse: () => categories.first,
     );
 
@@ -47,12 +61,12 @@ class ItemDetailScreen extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             CategoryBadge(
-              categoryId: item.category,
+              categoryId: widget.item.category,
               categoryName: category.name,
             ),
             const SizedBox(height: 12),
             Text(
-              item.title,
+              widget.item.title,
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                     height: 1.3,
@@ -64,7 +78,7 @@ class ItemDetailScreen extends ConsumerWidget {
                 Icon(Icons.access_time, size: 14, color: Colors.grey[400]),
                 const SizedBox(width: 4),
                 Text(
-                  _formatDateTime(item.timestamp),
+                  _formatDateTime(widget.item.timestamp),
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Colors.grey[500],
                       ),
@@ -73,7 +87,7 @@ class ItemDetailScreen extends ConsumerWidget {
                 Icon(Icons.source_outlined, size: 14, color: Colors.grey[400]),
                 const SizedBox(width: 4),
                 Text(
-                  item.source,
+                  widget.item.source,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Colors.grey[500],
                         fontStyle: FontStyle.italic,
@@ -83,13 +97,13 @@ class ItemDetailScreen extends ConsumerWidget {
             ),
             const Divider(height: 24),
             Text(
-              item.summary,
+              widget.item.summary,
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                     height: 1.6,
                   ),
             ),
             const SizedBox(height: 24),
-            _SourceLinkCard(url: item.url, onTap: () => _openUrl(context)),
+            _SourceLinkCard(url: widget.item.url, onTap: _openUrl),
             const SizedBox(height: 24),
             const Divider(),
             const SizedBox(height: 8),
@@ -114,7 +128,7 @@ class ItemDetailScreen extends ConsumerWidget {
                   active: liked == true,
                   onTap: () => ref
                       .read(feedbackProvider.notifier)
-                      .setFeedback(item.id, true),
+                      .setFeedback(widget.item.id, true),
                 ),
                 const SizedBox(width: 16),
                 _LargeFeedbackButton(
@@ -123,7 +137,7 @@ class ItemDetailScreen extends ConsumerWidget {
                   active: liked == false,
                   onTap: () => ref
                       .read(feedbackProvider.notifier)
-                      .setFeedback(item.id, false),
+                      .setFeedback(widget.item.id, false),
                 ),
               ],
             ),
