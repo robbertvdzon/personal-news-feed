@@ -50,14 +50,18 @@ class AnthropicService(
         val prompt = """
             Je bent een Nederlandse tech-nieuwsredacteur.
 
-            Selecteer de $count meest interessante en recente artikelen over "$categoryName" uit de lijst hieronder.
-            Schrijf voor elk artikel een Nederlandse samenvatting van 3-4 zinnen die de kern goed uitlegt.$extra
+            Selecteer de $count meest interessante en recente artikelen over "$categoryName" uit de lijst hieronder.$extra
+
+            Schrijf voor elk artikel een uitgebreide samenvatting van circa 800 woorden.
+            Gebruik meerdere alinea's gescheiden door een lege regel.
+            Schrijf de INHOUD van het artikel — wat er is gebeurd, wat er is gezegd, wat de bevindingen zijn.
+            Leg NIET uit wat het artikel behandelt of beschrijft. Geef gewoon de informatie zelf.
 
             Geef je antwoord als ALLEEN een JSON array (geen uitleg, geen markdown):
             [
               {
                 "title": "Artikel titel (Nederlands of origineel)",
-                "summary": "Nederlandse samenvatting van 3-4 zinnen.",
+                "summary": "Eerste alinea.\n\nTweede alinea.\n\nDerde alinea.",
                 "url": "originele URL",
                 "source": "naam van de bron"
               }
@@ -85,14 +89,18 @@ class AnthropicService(
             Je bent een Nederlandse tech-nieuwsredacteur.
 
             Zoek uit de lijst hieronder de $count artikelen die het meest relevant zijn voor het onderwerp: "$subject".
-            Schrijf voor elk artikel een Nederlandse samenvatting van 3-4 zinnen.
             Als er te weinig relevante artikelen zijn, kies dan de best passende.
+
+            Schrijf voor elk artikel een uitgebreide samenvatting van circa 800 woorden.
+            Gebruik meerdere alinea's gescheiden door een lege regel.
+            Schrijf de INHOUD van het artikel — wat er is gebeurd, wat er is gezegd, wat de bevindingen zijn.
+            Leg NIET uit wat het artikel behandelt of beschrijft. Geef gewoon de informatie zelf.
 
             Geef je antwoord als ALLEEN een JSON array (geen uitleg, geen markdown):
             [
               {
                 "title": "Artikel titel",
-                "summary": "Nederlandse samenvatting van 3-4 zinnen.",
+                "summary": "Eerste alinea.\n\nTweede alinea.\n\nDerde alinea.",
                 "url": "originele URL",
                 "source": "naam van de bron"
               }
@@ -108,7 +116,7 @@ class AnthropicService(
     private fun callClaude(prompt: String): List<SummarizedArticle> {
         val body = mapOf(
             "model" to model,
-            "max_tokens" to 8000,
+            "max_tokens" to 16000,
             "messages" to listOf(mapOf("role" to "user", "content" to prompt))
         )
 

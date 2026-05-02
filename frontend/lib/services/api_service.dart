@@ -61,6 +61,16 @@ class ApiService {
     );
   }
 
+  static Future<void> refreshNews() async {
+    final response = await _client.post(
+      Uri.parse('${AppConfig.apiBaseUrl}/api/news/refresh'),
+      headers: _headers,
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Fout bij verversen nieuws: ${response.statusCode}');
+    }
+  }
+
   static Future<void> markRead(String id) async {
     await _client.put(
       Uri.parse('${AppConfig.apiBaseUrl}/api/news/$id/read'),

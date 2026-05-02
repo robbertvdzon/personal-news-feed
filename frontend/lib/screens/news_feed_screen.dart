@@ -12,6 +12,7 @@ class NewsFeedScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final items = ref.watch(filteredNewsProvider);
     final isLoading = ref.watch(newsLoadingProvider);
+    final isRefreshing = ref.watch(sourceRefreshingProvider);
     final showRead = ref.watch(showReadProvider);
     final readCount = ref.watch(readCountProvider);
 
@@ -27,6 +28,30 @@ class NewsFeedScreen extends ConsumerWidget {
         ),
         centerTitle: false,
         actions: [
+          IconButton(
+            tooltip: 'Herlaad',
+            icon: const Icon(Icons.sync, size: 20),
+            onPressed: isLoading
+                ? null
+                : () => ref.read(newsProvider.notifier).refresh(),
+          ),
+          isRefreshing
+              ? const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 12),
+                  child: Center(
+                    child: SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                )
+              : IconButton(
+                  tooltip: 'Ververs alle categorieën (RSS + AI)',
+                  icon: const Icon(Icons.cloud_download_outlined, size: 20),
+                  onPressed: () =>
+                      ref.read(newsProvider.notifier).refreshFromSource(),
+                ),
           TextButton.icon(
             onPressed: () =>
                 ref.read(showReadProvider.notifier).state = !showRead,
@@ -46,9 +71,15 @@ class NewsFeedScreen extends ConsumerWidget {
             ),
           ),
         ],
-        bottom: const PreferredSize(
-          preferredSize: Size.fromHeight(48),
-          child: _CategoryTabBar(),
+        bottom: PreferredSize(
+          preferredSize: Size.fromHeight(isRefreshing ? 52 : 48),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isRefreshing) const LinearProgressIndicator(),
+              const _CategoryTabBar(),
+            ],
+          ),
         ),
       ),
       body: isLoading

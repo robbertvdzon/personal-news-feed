@@ -83,10 +83,25 @@ class NewsNotifier extends AsyncNotifier<List<NewsItem>> {
   void setItems(List<NewsItem> items) {
     state = AsyncData(items);
   }
+
+  Future<void> refreshFromSource() async {
+    ref.read(_sourceRefreshingProvider.notifier).state = true;
+    try {
+      await ApiService.refreshNews();
+      await refresh();
+    } finally {
+      ref.read(_sourceRefreshingProvider.notifier).state = false;
+    }
+  }
 }
 
 final newsProvider =
     AsyncNotifierProvider<NewsNotifier, List<NewsItem>>(NewsNotifier.new);
+
+final _sourceRefreshingProvider = StateProvider<bool>((ref) => false);
+
+final sourceRefreshingProvider = Provider<bool>((ref) =>
+    ref.watch(_sourceRefreshingProvider));
 
 // Gefilterde nieuwslijst (leeg tijdens laden)
 final filteredNewsProvider = Provider<List<NewsItem>>((ref) {

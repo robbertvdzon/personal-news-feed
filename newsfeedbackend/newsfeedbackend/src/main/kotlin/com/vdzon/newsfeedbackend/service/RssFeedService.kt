@@ -100,7 +100,7 @@ class RssFeedService {
                     url = entry.link?.trim() ?: return@mapNotNull null,
                     description = (entry.description?.value ?: entry.contents.firstOrNull()?.value ?: "")
                         .replace(Regex("<[^>]+>"), "")
-                        .take(300)
+                        .take(800)
                         .trim(),
                     source = feed.title?.trim() ?: URI(url).host,
                     publishedAt = published
