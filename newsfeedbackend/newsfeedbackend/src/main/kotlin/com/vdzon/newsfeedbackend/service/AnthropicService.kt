@@ -1,18 +1,24 @@
 package com.vdzon.newsfeedbackend.service
 
 import com.vdzon.newsfeedbackend.model.CategorySettings
-import com.vdzon.newsfeedbackend.model.NewsItem
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.stereotype.Service
 import org.springframework.http.client.SimpleClientHttpRequestFactory
+import org.springframework.stereotype.Service
 import org.springframework.web.client.RestClient
 import tools.jackson.databind.ObjectMapper
 import tools.jackson.module.kotlin.readValue
-import java.time.Instant
-import java.util.UUID
 import java.util.concurrent.Semaphore
 
+// Fase 1: gevonden artikel (titel + url + korte beschrijving)
+data class ArticleRef(
+    val title: String,
+    val url: String,
+    val source: String,
+    val description: String
+)
+
+// Fase 2: volledig samengevat artikel
 data class SummarizedArticle(
     val title: String,
     val summary: String,
@@ -37,8 +43,8 @@ class AnthropicService(
 
     private val client: RestClient by lazy {
         val factory = SimpleClientHttpRequestFactory().apply {
-            setConnectTimeout(10_000)       // 10 seconden verbinden
-            setReadTimeout(300_000)         // 5 minuten lezen (web search is traag)
+            setConnectTimeout(10_000)   // 10 seconden verbinden
+            setReadTimeout(120_000)     // 2 minuten per call (web search ~60s, summary ~15s)
         }
         RestClient.builder()
             .requestFactory(factory)
@@ -49,144 +55,186 @@ class AnthropicService(
             .build()
     }
 
-    fun searchAndSummarizeForCategory(
-        category: CategorySettings,
-        count: Int
-    ): ClaudeSearchResult {
-        val extra = if (category.extraInstructions.isNotBlank())
-            "\nExtra instructies: ${category.extraInstructions}" else ""
+    // ── Fase 1: zoek interessante artikelen via web search ────────────────────
 
-        val prompt = """
-            Je bent een Nederlandse tech-nieuwsredacteur.
-
-            Zoek via het web naar de $count meest interessante en recente nieuwsartikelen over "${category.name}".$extra
-
-            Schrijf voor elk gevonden artikel een uitgebreide samenvatting van circa 800 woorden.
-            Gebruik meerdere alinea's gescheiden door een lege regel.
-            Schrijf de INHOUD van het artikel — wat er is gebeurd, wat er is gezegd, wat de bevindingen zijn.
-            Leg NIET uit wat het artikel behandelt of beschrijft. Geef gewoon de informatie zelf.
-
-            Geef je antwoord als ALLEEN een JSON array (geen uitleg, geen markdown):
-            [
-              {
-                "title": "Artikel titel (Nederlands of origineel)",
-                "summary": "Eerste alinea.\n\nTweede alinea.\n\nDerde alinea.",
-                "url": "originele URL",
-                "source": "naam van de bron"
-              }
-            ]
-        """.trimIndent()
-
-        return callClaudeWithSearch(prompt)
-    }
-
-    fun searchAndSummarizeForSubject(
-        subject: String,
-        count: Int,
-        extraInstructions: String = ""
-    ): ClaudeSearchResult {
+    fun findArticles(subject: String, count: Int, extraInstructions: String = ""): Pair<List<ArticleRef>, Double> {
         val extra = if (extraInstructions.isNotBlank()) "\nExtra instructies: $extraInstructions" else ""
-
         val prompt = """
             Je bent een Nederlandse tech-nieuwsredacteur.
 
             Zoek via het web naar de $count meest interessante en recente nieuwsartikelen over "$subject".$extra
 
-            Schrijf voor elk gevonden artikel een uitgebreide samenvatting van circa 800 woorden.
-            Gebruik meerdere alinea's gescheiden door een lege regel.
-            Schrijf de INHOUD van het artikel — wat er is gebeurd, wat er is gezegd, wat de bevindingen zijn.
-            Leg NIET uit wat het artikel behandelt of beschrijft. Geef gewoon de informatie zelf.
+            Geef je antwoord als ALLEEN een JSON array (geen uitleg, geen markdown):
+            [
+              {
+                "title": "Artikel titel",
+                "url": "originele URL",
+                "source": "naam van de bron",
+                "description": "één zin beschrijving van het artikel"
+              }
+            ]
+        """.trimIndent()
+
+        val (text, cost) = callClaudeWithSearch(prompt)
+        val json = extractJson(text)
+        return try {
+            val refs = objectMapper.readValue<List<ArticleRef>>(json)
+            log.info("Fase 1: {} artikelen gevonden voor '{}'", refs.size, subject)
+            Pair(refs, cost)
+        } catch (e: Exception) {
+            log.error("Fase 1 JSON parsen mislukt voor '{}': {}", subject, e.message)
+            Pair(emptyList(), cost)
+        }
+    }
+
+    fun findArticlesForCategory(category: CategorySettings, count: Int): Pair<List<ArticleRef>, Double> {
+        val extra = if (category.extraInstructions.isNotBlank())
+            "\nExtra instructies: ${category.extraInstructions}" else ""
+        val prompt = """
+            Je bent een Nederlandse tech-nieuwsredacteur.
+
+            Zoek via het web naar de $count meest interessante en recente nieuwsartikelen over "${category.name}".$extra
 
             Geef je antwoord als ALLEEN een JSON array (geen uitleg, geen markdown):
             [
               {
                 "title": "Artikel titel",
-                "summary": "Eerste alinea.\n\nTweede alinea.\n\nDerde alinea.",
                 "url": "originele URL",
-                "source": "naam van de bron"
+                "source": "naam van de bron",
+                "description": "één zin beschrijving van het artikel"
               }
             ]
         """.trimIndent()
 
-        return callClaudeWithSearch(prompt)
+        val (text, cost) = callClaudeWithSearch(prompt)
+        val json = extractJson(text)
+        return try {
+            val refs = objectMapper.readValue<List<ArticleRef>>(json)
+            log.info("Fase 1: {} artikelen gevonden voor categorie '{}'", refs.size, category.name)
+            Pair(refs, cost)
+        } catch (e: Exception) {
+            log.error("Fase 1 JSON parsen mislukt voor '{}': {}", category.name, e.message)
+            Pair(emptyList(), cost)
+        }
     }
 
-    private fun callClaudeWithSearch(prompt: String): ClaudeSearchResult {
+    // ── Fase 2: schrijf samenvatting voor één artikel ─────────────────────────
+
+    fun summarizeArticle(article: ArticleRef, subject: String): Pair<SummarizedArticle, Double> {
+        val prompt = """
+            Je bent een Nederlandse tech-nieuwsredacteur.
+
+            Schrijf een uitgebreide samenvatting van circa 400 woorden over het volgende artikel over "$subject":
+
+            Titel: ${article.title}
+            Bron: ${article.source}
+            URL: ${article.url}
+            Beschrijving: ${article.description}
+
+            Gebruik meerdere alinea's gescheiden door een lege regel.
+            Schrijf de INHOUD — wat er is gebeurd, wat er is gezegd, wat de bevindingen zijn.
+            Leg NIET uit wat het artikel behandelt. Geef gewoon de informatie zelf.
+
+            Geef je antwoord als ALLEEN een JSON object (geen uitleg, geen markdown):
+            {
+              "title": "Artikel titel",
+              "summary": "Eerste alinea.\n\nTweede alinea.\n\nDerde alinea.",
+              "url": "originele URL",
+              "source": "naam van de bron"
+            }
+        """.trimIndent()
+
+        val (text, cost) = callClaude(prompt)
+        val json = extractJsonObject(text)
+        return try {
+            val article = objectMapper.readValue<SummarizedArticle>(json)
+            log.info("Fase 2: samenvatting klaar voor '{}'", article.title.take(50))
+            Pair(article, cost)
+        } catch (e: Exception) {
+            log.error("Fase 2 JSON parsen mislukt: {}", e.message)
+            // Fallback: gebruik beschrijving als samenvatting
+            Pair(SummarizedArticle(article.title, article.description, article.url, article.source), cost)
+        }
+    }
+
+    // ── Interne HTTP calls ────────────────────────────────────────────────────
+
+    private fun callClaudeWithSearch(prompt: String): Pair<String, Double> {
         val body = mapOf(
             "model" to model,
-            "max_tokens" to 8000,
+            "max_tokens" to 2000,
             "tools" to listOf(
                 mapOf("type" to "web_search_20250305", "name" to "web_search")
             ),
             "messages" to listOf(mapOf("role" to "user", "content" to prompt))
         )
-        val bodyJson = objectMapper.writeValueAsString(body)
+        return callWithRetry(body, useSearch = true)
+    }
 
+    private fun callClaude(prompt: String): Pair<String, Double> {
+        val body = mapOf(
+            "model" to model,
+            "max_tokens" to 2000,
+            "messages" to listOf(mapOf("role" to "user", "content" to prompt))
+        )
+        return callWithRetry(body, useSearch = false)
+    }
+
+    private fun callWithRetry(body: Map<String, Any>, useSearch: Boolean): Pair<String, Double> {
+        val bodyJson = objectMapper.writeValueAsString(body)
         val maxRetries = 4
-        var delayMs = 15_000L  // start met 15 seconden bij 429
+        var delayMs = 15_000L
 
         semaphore.acquire()
-        log.debug("Semaphore verkregen, {} permits resterend", semaphore.availablePermits())
         try {
-        repeat(maxRetries) { attempt ->
-            try {
-                val response = client.post()
-                    .uri("/v1/messages")
-                    .body(bodyJson)
-                    .retrieve()
-                    .body(String::class.java) ?: return ClaudeSearchResult(emptyList(), 0.0)
+            repeat(maxRetries) { attempt ->
+                try {
+                    val response = client.post()
+                        .uri("/v1/messages")
+                        .body(bodyJson)
+                        .retrieve()
+                        .body(String::class.java) ?: return Pair("", 0.0)
 
-                val root = objectMapper.readTree(response)
+                    val root = objectMapper.readTree(response)
 
-                // Extract cost
-                val usage = root.path("usage")
-                val inputTokens = usage.path("input_tokens").asLong(0)
-                val outputTokens = usage.path("output_tokens").asLong(0)
-                val webSearchRequests = usage.path("server_tool_use").path("web_search_requests").asLong(0)
-                val costUsd = inputTokens * 3e-6 + outputTokens * 15e-6 + webSearchRequests * 0.01
-                log.info("Claude kosten: {} input, {} output, {} web searches = \${}", inputTokens, outputTokens, webSearchRequests, "%.4f".format(costUsd))
+                    val usage = root.path("usage")
+                    val inputTokens = usage.path("input_tokens").asLong(0)
+                    val outputTokens = usage.path("output_tokens").asLong(0)
+                    val webSearchRequests = if (useSearch)
+                        usage.path("server_tool_use").path("web_search_requests").asLong(0) else 0L
+                    val costUsd = inputTokens * 3e-6 + outputTokens * 15e-6 + webSearchRequests * 0.01
+                    log.info("Claude kosten: {} input, {} output, {} searches = \${}", inputTokens, outputTokens, webSearchRequests, "%.4f".format(costUsd))
 
-                // Extract text from content array (filter for type=text blocks)
-                val contentArray = root.path("content")
-                val textParts = mutableListOf<String>()
-                for (i in 0 until contentArray.size()) {
-                    val node = contentArray.get(i)
-                    if (node.path("type").asText() == "text") {
-                        textParts.add(node.path("text").asText())
+                    val contentArray = root.path("content")
+                    val textParts = mutableListOf<String>()
+                    for (i in 0 until contentArray.size()) {
+                        val node = contentArray.get(i)
+                        if (node.path("type").asText() == "text") {
+                            textParts.add(node.path("text").asText())
+                        }
+                    }
+                    return Pair(textParts.joinToString("\n"), costUsd)
+
+                } catch (e: Exception) {
+                    val is429 = e.message?.contains("429") == true || e.message?.contains("rate_limit") == true
+                    val isConnError = e.message?.contains("handshake") == true
+                            || e.message?.contains("Connection") == true
+                            || e.message?.contains("I/O error") == true
+                            || e.message?.contains("timeout") == true
+                    if ((is429 || isConnError) && attempt < maxRetries - 1) {
+                        val reden = if (is429) "rate limit" else "verbindingsfout"
+                        log.warn("Claude {} (poging {}), wacht {} sec...", reden, attempt + 1, delayMs / 1000)
+                        Thread.sleep(delayMs)
+                        delayMs *= 2
+                    } else {
+                        log.error("Claude aanroep mislukt (poging {}): {}", attempt + 1, e.message)
+                        return Pair("", 0.0)
                     }
                 }
-                val text = textParts.joinToString("\n")
-
-                log.debug("Claude response tekst (eerste 500 tekens): {}", text.take(500))
-
-                val json = extractJson(text)
-                val articles = objectMapper.readValue<List<SummarizedArticle>>(json)
-                log.info("Claude leverde {} artikelen terug", articles.size)
-                if (articles.isEmpty()) log.warn("Claude gaf lege lijst terug. Raw JSON: {}", json.take(200))
-
-                return ClaudeSearchResult(articles, costUsd)
-
-            } catch (e: Exception) {
-                val is429 = e.message?.contains("429") == true || e.message?.contains("rate_limit") == true
-                val isConnectionError = e.message?.contains("handshake") == true
-                        || e.message?.contains("Connection") == true
-                        || e.message?.contains("I/O error") == true
-                        || e.message?.contains("timeout") == true
-                if ((is429 || isConnectionError) && attempt < maxRetries - 1) {
-                    val reden = if (is429) "rate limit" else "verbindingsfout"
-                    log.warn("Claude {} (poging {}), wacht {} seconden...", reden, attempt + 1, delayMs / 1000)
-                    Thread.sleep(delayMs)
-                    delayMs *= 2
-                } else {
-                    log.error("Claude web search aanroep mislukt (poging {}): {}", attempt + 1, e.message)
-                    return ClaudeSearchResult(emptyList(), 0.0)
-                }
             }
-        }
-        return ClaudeSearchResult(emptyList(), 0.0)
+            return Pair("", 0.0)
         } finally {
             semaphore.release()
-            log.debug("Semaphore vrijgegeven, {} permits beschikbaar", semaphore.availablePermits())
         }
     }
 
@@ -194,5 +242,11 @@ class AnthropicService(
         val start = text.indexOf('[')
         val end = text.lastIndexOf(']')
         return if (start != -1 && end != -1) text.substring(start, end + 1) else "[]"
+    }
+
+    private fun extractJsonObject(text: String): String {
+        val start = text.indexOf('{')
+        val end = text.lastIndexOf('}')
+        return if (start != -1 && end != -1) text.substring(start, end + 1) else "{}"
     }
 }

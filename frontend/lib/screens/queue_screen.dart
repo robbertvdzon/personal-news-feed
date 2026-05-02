@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/news_request.dart';
@@ -174,12 +175,7 @@ class _DailyUpdateTile extends ConsumerWidget {
                           ),
                         ),
                         const SizedBox(width: 6),
-                        Text(
-                          'Bezig...',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Colors.orange[700],
-                              ),
-                        ),
+                        _ElapsedTimeText(since: request.createdAt),
                       ],
                     ),
                   if (request.status == RequestStatus.done ||
@@ -406,12 +402,7 @@ class _RequestTile extends ConsumerWidget {
                           ),
                         ),
                         const SizedBox(width: 6),
-                        Text(
-                          'Bezig...',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Colors.orange[700],
-                              ),
-                        ),
+                        _ElapsedTimeText(since: request.createdAt),
                       ],
                     ),
                   if (request.status == RequestStatus.done ||
@@ -583,6 +574,56 @@ class _StatusChip extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 // Add Request Dialog
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Elapsed time widget — telt de verstreken tijd elke seconde
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ElapsedTimeText extends StatefulWidget {
+  final DateTime since;
+  const _ElapsedTimeText({required this.since});
+
+  @override
+  State<_ElapsedTimeText> createState() => _ElapsedTimeTextState();
+}
+
+class _ElapsedTimeTextState extends State<_ElapsedTimeText> {
+  late Timer _timer;
+  late Duration _elapsed;
+
+  @override
+  void initState() {
+    super.initState();
+    _elapsed = DateTime.now().difference(widget.since);
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) {
+        setState(() => _elapsed = DateTime.now().difference(widget.since));
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  String get _label {
+    final m = _elapsed.inMinutes;
+    final s = _elapsed.inSeconds % 60;
+    return m > 0 ? 'Bezig... ${m}m ${s}s' : 'Bezig... ${s}s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      _label,
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: Colors.orange[700],
+          ),
+    );
+  }
+}
 
 class _AddRequestDialog extends StatefulWidget {
   final NewsRequest? prefill;

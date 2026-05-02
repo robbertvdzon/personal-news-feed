@@ -7,6 +7,8 @@ import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.Executors
+import java.util.concurrent.Future
 
 data class DailyFetchResult(
     val items: List<NewsItem>,
@@ -19,50 +21,95 @@ class RealNewsSourceService(
     private val anthropicService: AnthropicService
 ) {
     private val log = LoggerFactory.getLogger(RealNewsSourceService::class.java)
+    private val executor = Executors.newCachedThreadPool()
 
-    fun fetchDailyNews(categories: List<CategorySettings>): DailyFetchResult {
-        val now = Instant.now().toString()
+    // Haalt per categorie artikelen op en roept onArticle aan zodra elk artikel klaar is
+    fun fetchDailyNews(
+        categories: List<CategorySettings>,
+        onArticle: (NewsItem) -> Unit = {}
+    ): DailyFetchResult {
         val allItems = mutableListOf<NewsItem>()
         val categoryResults = mutableListOf<CategoryResult>()
         var totalCost = 0.0
 
         categories.filter { it.enabled }.forEach { cat ->
-            log.info("Web search voor categorie: {}", cat.name)
-            val result = anthropicService.searchAndSummarizeForCategory(cat, count = 5)
-            val items = result.articles.map { it.toNewsItem(cat.id, now) }
-            allItems.addAll(items)
-            totalCost += result.costUsd
-            categoryResults.add(
-                CategoryResult(
-                    categoryId = cat.id,
-                    categoryName = cat.name,
-                    articleCount = items.size,
-                    costUsd = result.costUsd
-                )
-            )
-            log.info("Categorie '{}': {} artikelen, kosten \${}", cat.name, items.size, "%.4f".format(result.costUsd))
+            log.info("Fase 1: artikelen zoeken voor categorie '{}'", cat.name)
+            val (refs, searchCost) = anthropicService.findArticlesForCategory(cat, count = 5)
+            totalCost += searchCost
+
+            if (refs.isEmpty()) {
+                log.warn("Geen artikelen gevonden voor categorie '{}'", cat.name)
+                categoryResults.add(CategoryResult(cat.id, cat.name, 0, searchCost))
+                return@forEach
+            }
+
+            // Fase 2: samenvattingen parallel
+            val now = Instant.now().toString()
+            var summaryCost = 0.0
+            val futures: List<Future<Pair<NewsItem, Double>>> = refs.map { ref ->
+                executor.submit<Pair<NewsItem, Double>> {
+                    log.info("Fase 2: samenvatting voor '{}' ({})", ref.title.take(40), cat.name)
+                    val (article, cost) = anthropicService.summarizeArticle(ref, cat.name)
+                    val item = article.toNewsItem(cat.id, now)
+                    onArticle(item)
+                    Pair(item, cost)
+                }
+            }
+
+            futures.forEach { future ->
+                val (item, cost) = future.get()
+                allItems.add(item)
+                summaryCost += cost
+            }
+
+            totalCost += summaryCost
+            categoryResults.add(CategoryResult(cat.id, cat.name, refs.size, searchCost + summaryCost))
+            log.info("Categorie '{}': {} artikelen, kosten \${}", cat.name, refs.size, "%.4f".format(searchCost + summaryCost))
         }
 
         return DailyFetchResult(allItems, categoryResults, totalCost)
     }
 
+    // Haalt artikelen op voor een specifiek onderwerp en roept onArticle aan zodra elk artikel klaar is
     fun fetchArticlesForSubject(
         subject: String,
         preferredCount: Int,
         extraInstructions: String = "",
-        categories: List<CategorySettings>
+        categories: List<CategorySettings>,
+        onArticle: (NewsItem) -> Unit = {}
     ): Pair<List<NewsItem>, Double> {
+        log.info("Fase 1: artikelen zoeken voor onderwerp '{}'", subject)
+        val (refs, searchCost) = anthropicService.findArticles(subject, preferredCount, extraInstructions)
+
+        if (refs.isEmpty()) {
+            log.warn("Geen artikelen gevonden voor onderwerp '{}'", subject)
+            return Pair(emptyList(), searchCost)
+        }
+
+        // Fase 2: samenvattingen parallel
         val now = Instant.now().toString()
-        log.info("Web search voor onderwerp: {}", subject)
-        val result = anthropicService.searchAndSummarizeForSubject(
-            subject = subject,
-            count = preferredCount,
-            extraInstructions = extraInstructions
-        )
         val categoryId = detectCategory(subject, categories)
-        val items = result.articles.map { it.toNewsItem(categoryId, now) }
-        log.info("Onderwerp '{}': {} artikelen, kosten \${}", subject, items.size, "%.4f".format(result.costUsd))
-        return Pair(items, result.costUsd)
+        var summaryCost = 0.0
+
+        val futures: List<Future<Pair<NewsItem, Double>>> = refs.map { ref ->
+            executor.submit<Pair<NewsItem, Double>> {
+                log.info("Fase 2: samenvatting voor '{}'", ref.title.take(40))
+                val (article, cost) = anthropicService.summarizeArticle(ref, subject)
+                val item = article.toNewsItem(categoryId, now)
+                onArticle(item)
+                Pair(item, cost)
+            }
+        }
+
+        val allItems = futures.map { future ->
+            val (item, cost) = future.get()
+            summaryCost += cost
+            item
+        }
+
+        val totalCost = searchCost + summaryCost
+        log.info("Onderwerp '{}': {} artikelen, kosten \${}", subject, allItems.size, "%.4f".format(totalCost))
+        return Pair(allItems, totalCost)
     }
 
     private fun detectCategory(subject: String, categories: List<CategorySettings>): String {
