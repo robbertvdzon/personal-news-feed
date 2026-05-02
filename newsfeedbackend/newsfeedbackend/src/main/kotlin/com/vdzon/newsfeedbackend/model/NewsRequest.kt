@@ -7,6 +7,7 @@ data class NewsRequest(
     val sourceItemTitle: String? = null,
     val preferredCount: Int = 2,
     val maxCount: Int = 5,
+    val extraInstructions: String = "",
     val status: RequestStatus = RequestStatus.PENDING,
     val createdAt: String,
     val completedAt: String? = null,

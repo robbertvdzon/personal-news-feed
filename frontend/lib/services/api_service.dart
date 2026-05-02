@@ -71,6 +71,20 @@ class ApiService {
     }
   }
 
+  static Future<void> deleteNewsItem(String id) async {
+    await _client.delete(
+      Uri.parse('${AppConfig.apiBaseUrl}/api/news/$id'),
+      headers: _headers,
+    );
+  }
+
+  static Future<void> deleteRequest(String id) async {
+    await _client.delete(
+      Uri.parse('${AppConfig.apiBaseUrl}/api/requests/$id'),
+      headers: _headers,
+    );
+  }
+
   static Future<void> markRead(String id) async {
     await _client.put(
       Uri.parse('${AppConfig.apiBaseUrl}/api/news/$id/read'),
@@ -84,6 +98,7 @@ class ApiService {
     String? sourceItemTitle,
     int preferredCount = 2,
     int maxCount = 5,
+    String extraInstructions = '',
   }) async {
     final body = jsonEncode({
       'subject': subject,
@@ -91,6 +106,7 @@ class ApiService {
       if (sourceItemTitle != null) 'sourceItemTitle': sourceItemTitle,
       'preferredCount': preferredCount,
       'maxCount': maxCount,
+      if (extraInstructions.isNotEmpty) 'extraInstructions': extraInstructions,
     });
     final response = await _client.post(
       Uri.parse('${AppConfig.apiBaseUrl}/api/requests'),

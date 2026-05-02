@@ -44,19 +44,22 @@ class QueueScreen extends ConsumerWidget {
     );
   }
 
-  void _showAddDialog(BuildContext context, WidgetRef ref) {
+  void _showAddDialog(BuildContext context, WidgetRef ref, {NewsRequest? prefill}) {
     showDialog(
       context: context,
       builder: (context) => _AddRequestDialog(
+        prefill: prefill,
         onSubmit: ({
           required String subject,
           required int preferredCount,
           required int maxCount,
+          required String extraInstructions,
         }) {
           ref.read(requestProvider.notifier).addRequest(
                 subject: subject,
                 preferredCount: preferredCount,
                 maxCount: maxCount,
+                extraInstructions: extraInstructions,
               );
         },
       ),
@@ -64,100 +67,143 @@ class QueueScreen extends ConsumerWidget {
   }
 }
 
-class _RequestTile extends StatelessWidget {
+class _RequestTile extends ConsumerWidget {
   final NewsRequest request;
 
   const _RequestTile({required this.request});
 
   @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _StatusIcon(status: request.status),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        request.subject,
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ),
-                      if (request.sourceItemTitle != null) ...[
-                        const SizedBox(height: 4),
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Dismissible(
+      key: ValueKey(request.id),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        color: Colors.red,
+        child: const Icon(Icons.delete, color: Colors.white),
+      ),
+      onDismissed: (_) => ref.read(requestProvider.notifier).deleteRequest(request.id),
+      child: Card(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _StatusIcon(status: request.status),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                         Text(
-                          'Gebaseerd op: ${request.sourceItemTitle}',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(color: Colors.grey[600]),
+                          request.subject,
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        if (request.sourceItemTitle != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            'Gebaseerd op: ${request.sourceItemTitle}',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(color: Colors.grey[600]),
+                          ),
+                        ],
+                        if (request.extraInstructions.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            request.extraInstructions,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(color: Colors.grey[500], fontStyle: FontStyle.italic),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  _StatusChip(status: request.status),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.schedule, size: 14, color: Colors.grey[500]),
+                  const SizedBox(width: 4),
+                  Text(
+                    _formatTime(request.createdAt),
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: Colors.grey[500]),
+                  ),
+                  const Spacer(),
+                  if (request.status == RequestStatus.done)
+                    Text(
+                      '${request.newItemCount} artikel${request.newItemCount != 1 ? 'en' : ''} toegevoegd',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.primary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                    ),
+                  if (request.status == RequestStatus.processing)
+                    Row(
+                      children: [
+                        SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.orange[600],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Bezig...',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Colors.orange[700],
+                              ),
                         ),
                       ],
-                    ],
-                  ),
-                ),
-                _StatusChip(status: request.status),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(Icons.schedule, size: 14, color: Colors.grey[500]),
-                const SizedBox(width: 4),
-                Text(
-                  _formatTime(request.createdAt),
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: Colors.grey[500]),
-                ),
-                const Spacer(),
-                if (request.status == RequestStatus.done)
+                    ),
+                  if (request.status == RequestStatus.done ||
+                      request.status == RequestStatus.failed) ...[
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () => ref.read(requestProvider.notifier).rerunRequest(request),
+                      child: Row(
+                        children: [
+                          Icon(Icons.replay, size: 14, color: Colors.grey[500]),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Opnieuw',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: Colors.grey[500],
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(width: 8),
                   Text(
-                    '${request.newItemCount} artikel${request.newItemCount != 1 ? 'en' : ''} toegevoegd',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.primary,
-                          fontWeight: FontWeight.w500,
-                        ),
+                    '${request.preferredCount}–${request.maxCount} art.',
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: Colors.grey[400]),
                   ),
-                if (request.status == RequestStatus.processing)
-                  Row(
-                    children: [
-                      SizedBox(
-                        width: 12,
-                        height: 12,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.orange[600],
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Bezig...',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Colors.orange[700],
-                            ),
-                      ),
-                    ],
-                  ),
-                Text(
-                  '  ${request.preferredCount}–${request.maxCount} artikelen',
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: Colors.grey[500]),
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -197,11 +243,7 @@ class _StatusChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final (label, bg, fg) = switch (status) {
       RequestStatus.pending => ('Wachtend', Colors.grey[100]!, Colors.grey[700]!),
-      RequestStatus.processing => (
-          'Verwerken',
-          Colors.orange[50]!,
-          Colors.orange[800]!
-        ),
+      RequestStatus.processing => ('Verwerken', Colors.orange[50]!, Colors.orange[800]!),
       RequestStatus.done => ('Klaar', Colors.green[50]!, Colors.green[800]!),
       RequestStatus.failed => ('Mislukt', Colors.red[50]!, Colors.red[800]!),
     };
@@ -220,13 +262,15 @@ class _StatusChip extends StatelessWidget {
 }
 
 class _AddRequestDialog extends StatefulWidget {
+  final NewsRequest? prefill;
   final void Function({
     required String subject,
     required int preferredCount,
     required int maxCount,
+    required String extraInstructions,
   }) onSubmit;
 
-  const _AddRequestDialog({required this.onSubmit});
+  const _AddRequestDialog({required this.onSubmit, this.prefill});
 
   @override
   State<_AddRequestDialog> createState() => _AddRequestDialogState();
@@ -234,13 +278,24 @@ class _AddRequestDialog extends StatefulWidget {
 
 class _AddRequestDialogState extends State<_AddRequestDialog> {
   final _formKey = GlobalKey<FormState>();
-  final _subjectController = TextEditingController();
-  int _preferredCount = 3;
-  int _maxCount = 5;
+  late final TextEditingController _subjectController;
+  late final TextEditingController _extraController;
+  late int _preferredCount;
+  late int _maxCount;
+
+  @override
+  void initState() {
+    super.initState();
+    _subjectController = TextEditingController(text: widget.prefill?.subject ?? '');
+    _extraController = TextEditingController(text: widget.prefill?.extraInstructions ?? '');
+    _preferredCount = widget.prefill?.preferredCount ?? 3;
+    _maxCount = widget.prefill?.maxCount ?? 5;
+  }
 
   @override
   void dispose() {
     _subjectController.dispose();
+    _extraController.dispose();
     super.dispose();
   }
 
@@ -250,6 +305,7 @@ class _AddRequestDialogState extends State<_AddRequestDialog> {
         subject: _subjectController.text.trim(),
         preferredCount: _preferredCount,
         maxCount: _maxCount,
+        extraInstructions: _extraController.text.trim(),
       );
       Navigator.of(context).pop();
     }
@@ -259,74 +315,82 @@ class _AddRequestDialogState extends State<_AddRequestDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: const Text('Nieuw verzoek'),
-      content: Form(
-        key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextFormField(
-              controller: _subjectController,
-              decoration: const InputDecoration(
-                labelText: 'Onderwerp',
-                hintText: 'Bijv. Rust async runtime',
-                border: OutlineInputBorder(),
+      content: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: _subjectController,
+                decoration: const InputDecoration(
+                  labelText: 'Onderwerp',
+                  hintText: 'Bijv. Rust async runtime',
+                  border: OutlineInputBorder(),
+                ),
+                autofocus: true,
+                validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? 'Verplicht veld' : null,
+                onFieldSubmitted: (_) => _submit(),
               ),
-              autofocus: true,
-              validator: (v) =>
-                  (v == null || v.trim().isEmpty) ? 'Verplicht veld' : null,
-              onFieldSubmitted: (_) => _submit(),
-            ),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Voorkeur: $_preferredCount',
-                          style: Theme.of(context).textTheme.bodySmall),
-                      Slider(
-                        value: _preferredCount.toDouble(),
-                        min: 1,
-                        max: 10,
-                        divisions: 9,
-                        label: '$_preferredCount',
-                        onChanged: (v) => setState(() {
-                          _preferredCount = v.round();
-                          if (_maxCount < _preferredCount) {
-                            _maxCount = _preferredCount;
-                          }
-                        }),
-                      ),
-                    ],
-                  ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _extraController,
+                decoration: const InputDecoration(
+                  labelText: 'Extra instructies (optioneel)',
+                  hintText: 'Bijv. focus op security aspecten',
+                  border: OutlineInputBorder(),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Maximum: $_maxCount',
-                          style: Theme.of(context).textTheme.bodySmall),
-                      Slider(
-                        value: _maxCount.toDouble(),
-                        min: 1,
-                        max: 20,
-                        divisions: 19,
-                        label: '$_maxCount',
-                        onChanged: (v) => setState(() {
-                          _maxCount = v.round();
-                          if (_preferredCount > _maxCount) {
-                            _preferredCount = _maxCount;
-                          }
-                        }),
-                      ),
-                    ],
+                maxLines: 2,
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Voorkeur: $_preferredCount',
+                            style: Theme.of(context).textTheme.bodySmall),
+                        Slider(
+                          value: _preferredCount.toDouble(),
+                          min: 1,
+                          max: 10,
+                          divisions: 9,
+                          label: '$_preferredCount',
+                          onChanged: (v) => setState(() {
+                            _preferredCount = v.round();
+                            if (_maxCount < _preferredCount) _maxCount = _preferredCount;
+                          }),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Maximum: $_maxCount',
+                            style: Theme.of(context).textTheme.bodySmall),
+                        Slider(
+                          value: _maxCount.toDouble(),
+                          min: 1,
+                          max: 20,
+                          divisions: 19,
+                          label: '$_maxCount',
+                          onChanged: (v) => setState(() {
+                            _maxCount = v.round();
+                            if (_preferredCount > _maxCount) _preferredCount = _maxCount;
+                          }),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
       actions: [

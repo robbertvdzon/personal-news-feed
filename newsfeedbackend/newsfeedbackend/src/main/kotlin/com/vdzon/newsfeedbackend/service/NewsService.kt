@@ -32,6 +32,12 @@ class NewsService(
         log.info("{} nieuw(e) artikel(en) toegevoegd voor {}", items.size, username)
     }
 
+    fun deleteItem(username: String, id: String) {
+        val items = storageService.loadNews(username).toMutableList()
+        items.removeIf { it.id == id }
+        storageService.saveNews(username, items)
+    }
+
     fun markRead(username: String, id: String) {
         val items = storageService.loadNews(username).toMutableList()
         val index = items.indexOfFirst { it.id == id }

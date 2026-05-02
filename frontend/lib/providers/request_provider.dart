@@ -70,16 +70,56 @@ class RequestNotifier extends AsyncNotifier<List<NewsRequest>> {
     String? sourceItemTitle,
     int preferredCount = 2,
     int maxCount = 5,
+    String extraInstructions = '',
   }) async {
-    final newRequest = await ApiService.createRequest(
+    // Optimistisch toevoegen zodat het meteen zichtbaar is
+    final tempId = 'temp-${DateTime.now().millisecondsSinceEpoch}';
+    final tempRequest = NewsRequest(
+      id: tempId,
       subject: subject,
       sourceItemId: sourceItemId,
       sourceItemTitle: sourceItemTitle,
       preferredCount: preferredCount,
       maxCount: maxCount,
+      extraInstructions: extraInstructions,
+      status: RequestStatus.pending,
+      createdAt: DateTime.now(),
     );
     final current = state.valueOrNull ?? [];
-    state = AsyncData([newRequest, ...current]);
+    state = AsyncData([tempRequest, ...current]);
+
+    try {
+      final newRequest = await ApiService.createRequest(
+        subject: subject,
+        sourceItemId: sourceItemId,
+        sourceItemTitle: sourceItemTitle,
+        preferredCount: preferredCount,
+        maxCount: maxCount,
+        extraInstructions: extraInstructions,
+      );
+      final updated = state.valueOrNull ?? [];
+      state = AsyncData(updated.map((r) => r.id == tempId ? newRequest : r).toList());
+    } catch (e) {
+      final updated = state.valueOrNull ?? [];
+      state = AsyncData(updated.where((r) => r.id != tempId).toList());
+    }
+  }
+
+  Future<void> deleteRequest(String id) async {
+    final current = state.valueOrNull ?? [];
+    state = AsyncData(current.where((r) => r.id != id).toList());
+    await ApiService.deleteRequest(id);
+  }
+
+  Future<void> rerunRequest(NewsRequest request) async {
+    await addRequest(
+      subject: request.subject,
+      sourceItemId: request.sourceItemId,
+      sourceItemTitle: request.sourceItemTitle,
+      preferredCount: request.preferredCount,
+      maxCount: request.maxCount,
+      extraInstructions: request.extraInstructions,
+    );
   }
 
   Future<void> refresh() async {

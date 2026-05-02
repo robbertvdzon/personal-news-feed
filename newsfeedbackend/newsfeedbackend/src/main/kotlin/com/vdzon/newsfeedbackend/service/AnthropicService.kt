@@ -77,7 +77,8 @@ class AnthropicService(
     fun summarizeForSubject(
         articles: List<RawArticle>,
         subject: String,
-        count: Int
+        count: Int,
+        extraInstructions: String = ""
     ): List<SummarizedArticle> {
         if (articles.isEmpty()) return emptyList()
 
@@ -85,10 +86,12 @@ class AnthropicService(
             "Titel: ${a.title}\nBron: ${a.source}\nURL: ${a.url}\nBeschrijving: ${a.description}"
         }
 
+        val extra = if (extraInstructions.isNotBlank()) "\nExtra instructies: $extraInstructions" else ""
+
         val prompt = """
             Je bent een Nederlandse tech-nieuwsredacteur.
 
-            Zoek uit de lijst hieronder de $count artikelen die het meest relevant zijn voor het onderwerp: "$subject".
+            Zoek uit de lijst hieronder de $count artikelen die het meest relevant zijn voor het onderwerp: "$subject".$extra
             Als er te weinig relevante artikelen zijn, kies dan de best passende.
 
             Schrijf voor elk artikel een uitgebreide samenvatting van circa 800 woorden.

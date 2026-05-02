@@ -84,6 +84,12 @@ class NewsNotifier extends AsyncNotifier<List<NewsItem>> {
     state = AsyncData(items);
   }
 
+  Future<void> deleteItem(String id) async {
+    final current = state.valueOrNull ?? [];
+    state = AsyncData(current.where((i) => i.id != id).toList());
+    await ApiService.deleteNewsItem(id);
+  }
+
   Future<void> refreshFromSource() async {
     ref.read(_sourceRefreshingProvider.notifier).state = true;
     try {

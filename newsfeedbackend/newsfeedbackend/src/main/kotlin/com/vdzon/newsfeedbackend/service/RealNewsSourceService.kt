@@ -40,6 +40,7 @@ class RealNewsSourceService(
     fun fetchArticlesForSubject(
         subject: String,
         preferredCount: Int,
+        extraInstructions: String = "",
         categories: List<CategorySettings>
     ): List<NewsItem> {
         val now = Instant.now().toString()
@@ -53,7 +54,8 @@ class RealNewsSourceService(
         val summarized = anthropicService.summarizeForSubject(
             articles = articles,
             subject = subject,
-            count = preferredCount
+            count = preferredCount,
+            extraInstructions = extraInstructions
         )
         // Categorie bepalen op basis van welke categorie de meeste overlap heeft
         val categoryId = detectCategory(subject, categories)

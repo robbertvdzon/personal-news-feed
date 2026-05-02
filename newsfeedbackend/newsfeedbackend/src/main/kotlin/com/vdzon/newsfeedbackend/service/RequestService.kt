@@ -30,12 +30,19 @@ class RequestService(
             sourceItemTitle = dto.sourceItemTitle,
             preferredCount = dto.preferredCount,
             maxCount = dto.maxCount,
+            extraInstructions = dto.extraInstructions,
             status = RequestStatus.PENDING,
             createdAt = Instant.now().toString()
         )
         saveRequest(username, request)
         processAsync(username, request)
         return request
+    }
+
+    fun delete(username: String, id: String) {
+        val requests = storageService.loadRequests(username).toMutableList()
+        requests.removeIf { it.id == id }
+        storageService.saveRequests(username, requests)
     }
 
     @Async
@@ -46,6 +53,7 @@ class RequestService(
             val articles = realNewsSourceService.fetchArticlesForSubject(
                 subject = request.subject,
                 preferredCount = request.preferredCount,
+                extraInstructions = request.extraInstructions,
                 categories = categories
             )
             if (articles.isNotEmpty()) {

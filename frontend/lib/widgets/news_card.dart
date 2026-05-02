@@ -40,7 +40,21 @@ class NewsCard extends ConsumerWidget {
             orElse: () => categories.first,
           );
 
-    return Card(
+    return Dismissible(
+      key: ValueKey(item.id),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.red,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Icon(Icons.delete, color: Colors.white),
+      ),
+      onDismissed: (_) => ref.read(newsProvider.notifier).deleteItem(item.id),
+      child: Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       elevation: isRead ? 0 : 1,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -151,7 +165,8 @@ class NewsCard extends ConsumerWidget {
           ),
         ),
       ),
-    );
+      ), // Card
+    ); // Dismissible
   }
 }
 

@@ -84,19 +84,27 @@ class NewsFeedScreen extends ConsumerWidget {
       ),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
-          : items.isEmpty
-          ? _EmptyState(showRead: showRead, readCount: readCount)
           : RefreshIndicator(
               onRefresh: () => ref.read(newsProvider.notifier).refresh(),
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                itemCount: items.length,
-                itemBuilder: (context, index) => NewsCard(
-                  item: items[index],
-                  allItems: items,
-                  index: index,
-                ),
-              ),
+              child: items.isEmpty
+                  ? LayoutBuilder(
+                      builder: (context, constraints) => SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        child: SizedBox(
+                          height: constraints.maxHeight,
+                          child: _EmptyState(showRead: showRead, readCount: readCount),
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      itemCount: items.length,
+                      itemBuilder: (context, index) => NewsCard(
+                        item: items[index],
+                        allItems: items,
+                        index: index,
+                      ),
+                    ),
             ),
     );
   }
