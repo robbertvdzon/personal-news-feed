@@ -11,17 +11,17 @@ DEFINES_PROD  = --dart-define=API_BASE_URL=$(PROD_API)  --dart-define=WS_BASE_UR
 
 .PHONY: run run-ext run-prod run-android run-android-ext run-android-local build build-local clean
 
-# Web tegen extern IP (tijdelijk port-forwarded), bereikbaar van buiten via poort 19285
+# Web tegen extern IP, Chrome op localhost:3000, ook bereikbaar van buiten via poort 19285
 run:
-	flutter run -d chrome --web-port=3000 --web-hostname=0.0.0.0 $(DEFINES_EXT)
+	flutter run -d chrome --web-port=3000 --web-hostname=0.0.0.0 --web-browser-flag="--app=http://localhost:3000" $(DEFINES_EXT)
 
 # Web tegen lokale backend
 run-local:
 	flutter run -d chrome --web-port=3000 $(DEFINES_LOCAL)
 
-# Web tegen extern IP (tijdelijk port-forwarded), bereikbaar van buiten via poort 19285
+# Web tegen extern IP, Chrome op localhost:3000, ook bereikbaar van buiten via poort 19285
 run-ext:
-	flutter run -d chrome --web-port=3000 --web-hostname=0.0.0.0 $(DEFINES_EXT)
+	flutter run -d chrome --web-port=3000 --web-hostname=0.0.0.0 --web-browser-flag="--app=http://localhost:3000" $(DEFINES_EXT)
 
 # Web tegen productie backend
 run-prod:
@@ -40,6 +40,10 @@ run-android-local:
 # Android tegen productie
 run-android:
 	flutter run -d android $(DEFINES_PROD)
+
+# Web bouwen + serveren op alle interfaces (bereikbaar via poort 19285)
+serve-ext:
+	flutter build web $(DEFINES_EXT) && cd build/web && python3 -m http.server 3000 --bind 0.0.0.0
 
 # APK tegen extern IP (tijdelijk port-forwarded)
 build-apk-ext:
