@@ -10,6 +10,7 @@ import tools.jackson.databind.ObjectMapper
 import tools.jackson.module.kotlin.readValue
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.Semaphore
 
 data class SummarizedArticle(
     val title: String,
@@ -31,6 +32,7 @@ class AnthropicService(
     @Value("\${app.anthropic.base-url}") private val baseUrl: String
 ) {
     private val log = LoggerFactory.getLogger(AnthropicService::class.java)
+    private val semaphore = Semaphore(3) // max 3 gelijktijdige Claude calls
 
     private val client: RestClient by lazy {
         RestClient.builder()
@@ -117,6 +119,9 @@ class AnthropicService(
         val maxRetries = 4
         var delayMs = 15_000L  // start met 15 seconden bij 429
 
+        semaphore.acquire()
+        log.debug("Semaphore verkregen, {} permits resterend", semaphore.availablePermits())
+        try {
         repeat(maxRetries) { attempt ->
             try {
                 val response = client.post()
@@ -168,6 +173,10 @@ class AnthropicService(
             }
         }
         return ClaudeSearchResult(emptyList(), 0.0)
+        } finally {
+            semaphore.release()
+            log.debug("Semaphore vrijgegeven, {} permits beschikbaar", semaphore.availablePermits())
+        }
     }
 
     private fun extractJson(text: String): String {
