@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
+import '../config/app_config.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/app_logo.dart';
 
@@ -23,6 +25,46 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     _usernameController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  Future<void> _testConnection() async {
+    final url = '${AppConfig.apiBaseUrl}/api/test';
+    final result = StringBuffer();
+    result.writeln('URL: $url\n');
+    try {
+      final stopwatch = Stopwatch()..start();
+      final response = await http.get(Uri.parse(url)).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => throw Exception('Timeout na 10 seconden'),
+      );
+      stopwatch.stop();
+      result.writeln('Status: ${response.statusCode}');
+      result.writeln('Tijd: ${stopwatch.elapsedMilliseconds}ms');
+      result.writeln('Headers: ${response.headers}');
+      result.writeln('\nBody: ${response.body}');
+    } catch (e) {
+      result.writeln('FOUT: $e');
+      result.writeln('\nType: ${e.runtimeType}');
+    }
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Verbindingstest'),
+        content: SingleChildScrollView(
+          child: SelectableText(
+            result.toString(),
+            style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Sluiten'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _submit() async {
@@ -145,6 +187,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           _isRegistering
                               ? 'Al een account? Inloggen'
                               : 'Nog geen account? Registreren',
+                        ),
+                      ),
+                      const Divider(height: 32),
+                      TextButton.icon(
+                        onPressed: _testConnection,
+                        icon: const Icon(Icons.bug_report_outlined, size: 16),
+                        label: Text(
+                          'Test verbinding (${AppConfig.apiBaseUrl})',
+                          style: const TextStyle(fontSize: 11),
+                        ),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.grey[500],
                         ),
                       ),
                     ],
