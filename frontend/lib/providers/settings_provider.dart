@@ -1,10 +1,15 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/category.dart';
 import '../services/api_service.dart';
+import 'auth_provider.dart';
 
 class SettingsNotifier extends AsyncNotifier<List<Category>> {
   @override
-  Future<List<Category>> build() => ApiService.fetchSettings();
+  Future<List<Category>> build() async {
+    final auth = ref.watch(authProvider).valueOrNull;
+    if (auth?.isLoggedIn != true) return [];
+    return ApiService.fetchSettings();
+  }
 
   Future<void> toggleCategory(String categoryId) => _mutate((cats) => [
         for (final cat in cats)

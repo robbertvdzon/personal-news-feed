@@ -4,12 +4,17 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../config/app_config.dart';
 import '../models/news_request.dart';
 import '../services/api_service.dart';
+import 'auth_provider.dart';
 
 class RequestNotifier extends AsyncNotifier<List<NewsRequest>> {
   WebSocketChannel? _channel;
 
   @override
   Future<List<NewsRequest>> build() async {
+    final auth = ref.watch(authProvider).valueOrNull;
+    if (auth?.isLoggedIn != true) {
+      return [];
+    }
     final requests = await ApiService.fetchRequests();
     _connectWebSocket();
     ref.onDispose(_disconnect);

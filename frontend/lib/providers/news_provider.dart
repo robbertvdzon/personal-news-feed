@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/news_item.dart';
 import '../services/api_service.dart';
+import 'auth_provider.dart';
 import 'settings_provider.dart';
 
 // 👍/👎 feedback per item
@@ -45,7 +46,11 @@ final showReadProvider = StateProvider<bool>((ref) => false);
 // Nieuws van de backend
 class NewsNotifier extends AsyncNotifier<List<NewsItem>> {
   @override
-  Future<List<NewsItem>> build() => ApiService.fetchNews();
+  Future<List<NewsItem>> build() async {
+    final auth = ref.watch(authProvider).valueOrNull;
+    if (auth?.isLoggedIn != true) return [];
+    return ApiService.fetchNews();
+  }
 
   Future<void> refresh() async {
     state = const AsyncLoading();
