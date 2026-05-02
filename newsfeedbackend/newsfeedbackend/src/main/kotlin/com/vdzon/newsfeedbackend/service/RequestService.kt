@@ -13,7 +13,6 @@ import java.util.UUID
 @Service
 class RequestService(
     private val storageService: StorageService,
-    private val mockNewsService: MockNewsService,
     private val realNewsSourceService: RealNewsSourceService,
     private val settingsService: SettingsService,
     private val newsService: NewsService,
@@ -51,12 +50,11 @@ class RequestService(
             )
             if (articles.isNotEmpty()) {
                 newsService.addItems(username, articles)
-                updateStatus(username, request.id, RequestStatus.DONE, articles.size)
+                log.info("Verzoek '{}' afgerond voor {}: {} artikelen gevonden", request.subject, username, articles.size)
             } else {
-                val mockArticles = mockNewsService.fetchArticlesForSubject(request.subject, request.preferredCount)
-                newsService.addItems(username, mockArticles)
-                updateStatus(username, request.id, RequestStatus.DONE, mockArticles.size)
+                log.warn("Verzoek '{}' afgerond voor {}: geen relevante artikelen gevonden", request.subject, username)
             }
+            updateStatus(username, request.id, RequestStatus.DONE, articles.size)
         } catch (e: Exception) {
             log.error("Request verwerking mislukt voor {}: {}", username, e.message)
             updateStatus(username, request.id, RequestStatus.FAILED)

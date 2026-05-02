@@ -61,6 +61,13 @@ class ApiService {
     );
   }
 
+  static Future<void> markRead(String id) async {
+    await _client.put(
+      Uri.parse('${AppConfig.apiBaseUrl}/api/news/$id/read'),
+      headers: _headers,
+    );
+  }
+
   static Future<NewsRequest> createRequest({
     required String subject,
     String? sourceItemId,

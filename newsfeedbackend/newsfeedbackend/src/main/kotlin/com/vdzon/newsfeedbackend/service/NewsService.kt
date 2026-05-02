@@ -29,6 +29,15 @@ class NewsService(
         val current = storageService.loadNews(username).toMutableList()
         current.addAll(0, items)
         storageService.saveNews(username, current)
+        log.info("{} nieuw(e) artikel(en) toegevoegd voor {}", items.size, username)
+    }
+
+    fun markRead(username: String, id: String) {
+        val items = storageService.loadNews(username).toMutableList()
+        val index = items.indexOfFirst { it.id == id }
+        if (index == -1) return
+        items[index] = items[index].copy(isRead = true)
+        storageService.saveNews(username, items)
     }
 
     fun refresh(username: String) {

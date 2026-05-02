@@ -5,6 +5,7 @@ import '../config/app_config.dart';
 import '../models/news_request.dart';
 import '../services/api_service.dart';
 import 'auth_provider.dart';
+import 'news_provider.dart';
 
 class RequestNotifier extends AsyncNotifier<List<NewsRequest>> {
   WebSocketChannel? _channel;
@@ -46,6 +47,9 @@ class RequestNotifier extends AsyncNotifier<List<NewsRequest>> {
       final newList = [...current];
       newList[index] = updated;
       state = AsyncData(newList);
+      if (updated.status == RequestStatus.done) {
+        ref.read(newsProvider.notifier).refresh();
+      }
     } catch (_) {}
   }
 

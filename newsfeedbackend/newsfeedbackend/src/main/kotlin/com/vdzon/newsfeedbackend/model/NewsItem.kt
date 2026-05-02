@@ -7,5 +7,6 @@ data class NewsItem(
     val url: String,
     val category: String,
     val timestamp: String,
-    val source: String
+    val source: String,
+    val isRead: Boolean = false
 )

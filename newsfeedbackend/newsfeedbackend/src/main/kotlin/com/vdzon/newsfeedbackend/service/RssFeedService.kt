@@ -38,7 +38,7 @@ class RssFeedService {
         ),
         "blockchain" to listOf(
             "https://cointelegraph.com/rss",
-            "https://bitcoinmagazine.com/.rss/full/"
+            "https://decrypt.co/feed"
         ),
         "spring" to listOf(
             "https://spring.io/blog.atom",
@@ -58,7 +58,10 @@ class RssFeedService {
     private val generalFeeds = listOf(
         "https://news.ycombinator.com/rss",
         "https://dev.to/feed",
-        "https://www.theregister.com/headlines.atom"
+        "https://www.theregister.com/headlines.atom",
+        "https://feeds.reuters.com/reuters/topNews",
+        "https://feeds.bbci.co.uk/news/rss.xml",
+        "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml"
     )
 
     fun fetchForCategory(category: String, maxAgeDays: Long = 7): List<RawArticle> {
@@ -72,7 +75,7 @@ class RssFeedService {
 
     fun fetchAll(maxAgeDays: Long = 3): List<RawArticle> {
         val cutoff = Instant.now().minus(maxAgeDays, ChronoUnit.DAYS)
-        return feedsPerCategory.values.flatten()
+        return (feedsPerCategory.values.flatten() + generalFeeds)
             .distinct()
             .flatMap { url -> fetchFeed(url, cutoff) }
             .distinctBy { it.url }

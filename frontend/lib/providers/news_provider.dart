@@ -22,15 +22,27 @@ class FeedbackNotifier extends Notifier<Map<String, bool>> {
 final feedbackProvider =
     NotifierProvider<FeedbackNotifier, Map<String, bool>>(FeedbackNotifier.new);
 
-// Gelezen items
+// Gelezen items — alleen lokale cache voor items die in deze sessie gelezen zijn
+// De persistent staat komt via isRead op NewsItem vanuit de backend
 class ReadItemsNotifier extends Notifier<Set<String>> {
   @override
   Set<String> build() => {};
 
-  void markRead(String itemId) {
-    if (!state.contains(itemId)) {
-      state = {...state, itemId};
-    }
+  void initFromBackend(Set<String> ids) {
+    state = ids;
+  }
+
+  Future<void> markRead(String itemId) async {
+    if (state.contains(itemId)) return;
+    state = {...state, itemId};
+    await ApiService.markRead(itemId);
+    final items = ref.read(newsProvider).valueOrNull;
+    if (items == null) return;
+    final index = items.indexWhere((i) => i.id == itemId);
+    if (index == -1) return;
+    final updated = [...items];
+    updated[index] = updated[index].copyWith(isRead: true);
+    ref.read(newsProvider.notifier).setItems(updated);
   }
 }
 
@@ -49,12 +61,27 @@ class NewsNotifier extends AsyncNotifier<List<NewsItem>> {
   Future<List<NewsItem>> build() async {
     final auth = ref.watch(authProvider).valueOrNull;
     if (auth?.isLoggedIn != true) return [];
-    return ApiService.fetchNews();
+    final items = await ApiService.fetchNews();
+    // Initialiseer lokale read-cache vanuit backend staat
+    final alreadyRead = items.where((i) => i.isRead).map((i) => i.id).toSet();
+    ref.read(readItemsProvider.notifier).initFromBackend(alreadyRead);
+    return items;
   }
 
   Future<void> refresh() async {
     state = const AsyncLoading();
-    state = await AsyncValue.guard(ApiService.fetchNews);
+    final items = await AsyncValue.guard(ApiService.fetchNews);
+    state = items;
+    // Sync read-cache na refresh
+    final loaded = items.valueOrNull;
+    if (loaded != null) {
+      final alreadyRead = loaded.where((i) => i.isRead).map((i) => i.id).toSet();
+      ref.read(readItemsProvider.notifier).initFromBackend(alreadyRead);
+    }
+  }
+
+  void setItems(List<NewsItem> items) {
+    state = AsyncData(items);
   }
 }
 
