@@ -5,6 +5,7 @@ import com.vdzon.newsfeedbackend.model.NewsItem
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
+import org.springframework.http.client.SimpleClientHttpRequestFactory
 import org.springframework.web.client.RestClient
 import tools.jackson.databind.ObjectMapper
 import tools.jackson.module.kotlin.readValue
@@ -35,7 +36,12 @@ class AnthropicService(
     private val semaphore = Semaphore(3) // max 3 gelijktijdige Claude calls
 
     private val client: RestClient by lazy {
+        val factory = SimpleClientHttpRequestFactory().apply {
+            setConnectTimeout(10_000)       // 10 seconden verbinden
+            setReadTimeout(300_000)         // 5 minuten lezen (web search is traag)
+        }
         RestClient.builder()
+            .requestFactory(factory)
             .baseUrl(baseUrl)
             .defaultHeader("x-api-key", apiKey)
             .defaultHeader("anthropic-version", "2023-06-01")
@@ -162,10 +168,15 @@ class AnthropicService(
 
             } catch (e: Exception) {
                 val is429 = e.message?.contains("429") == true || e.message?.contains("rate_limit") == true
-                if (is429 && attempt < maxRetries - 1) {
-                    log.warn("Claude rate limit (poging {}), wacht {} seconden...", attempt + 1, delayMs / 1000)
+                val isConnectionError = e.message?.contains("handshake") == true
+                        || e.message?.contains("Connection") == true
+                        || e.message?.contains("I/O error") == true
+                        || e.message?.contains("timeout") == true
+                if ((is429 || isConnectionError) && attempt < maxRetries - 1) {
+                    val reden = if (is429) "rate limit" else "verbindingsfout"
+                    log.warn("Claude {} (poging {}), wacht {} seconden...", reden, attempt + 1, delayMs / 1000)
                     Thread.sleep(delayMs)
-                    delayMs *= 2  // exponential backoff
+                    delayMs *= 2
                 } else {
                     log.error("Claude web search aanroep mislukt (poging {}): {}", attempt + 1, e.message)
                     return ClaudeSearchResult(emptyList(), 0.0)
