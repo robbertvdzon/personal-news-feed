@@ -4,6 +4,7 @@ import com.vdzon.newsfeedbackend.model.CreateRequestDto
 import com.vdzon.newsfeedbackend.model.NewsRequest
 import com.vdzon.newsfeedbackend.model.RequestStatus
 import com.vdzon.newsfeedbackend.websocket.RequestWebSocketHandler
+import org.slf4j.LoggerFactory
 import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Service
 import java.time.Instant
@@ -13,9 +14,13 @@ import java.util.UUID
 class RequestService(
     private val storageService: StorageService,
     private val mockNewsService: MockNewsService,
+    private val realNewsSourceService: RealNewsSourceService,
+    private val settingsService: SettingsService,
     private val newsService: NewsService,
     private val webSocketHandler: RequestWebSocketHandler
 ) {
+    private val log = LoggerFactory.getLogger(RequestService::class.java)
+
     fun getAll(username: String): List<NewsRequest> = storageService.loadRequests(username)
 
     fun create(username: String, dto: CreateRequestDto): NewsRequest {
@@ -38,10 +43,22 @@ class RequestService(
     fun processAsync(username: String, request: NewsRequest) {
         updateStatus(username, request.id, RequestStatus.PROCESSING)
         try {
-            val articles = mockNewsService.fetchArticlesForSubject(request.subject, request.preferredCount)
-            newsService.addItems(username, articles)
-            updateStatus(username, request.id, RequestStatus.DONE, articles.size)
+            val categories = settingsService.getSettings(username)
+            val articles = realNewsSourceService.fetchArticlesForSubject(
+                subject = request.subject,
+                preferredCount = request.preferredCount,
+                categories = categories
+            )
+            if (articles.isNotEmpty()) {
+                newsService.addItems(username, articles)
+                updateStatus(username, request.id, RequestStatus.DONE, articles.size)
+            } else {
+                val mockArticles = mockNewsService.fetchArticlesForSubject(request.subject, request.preferredCount)
+                newsService.addItems(username, mockArticles)
+                updateStatus(username, request.id, RequestStatus.DONE, mockArticles.size)
+            }
         } catch (e: Exception) {
+            log.error("Request verwerking mislukt voor {}: {}", username, e.message)
             updateStatus(username, request.id, RequestStatus.FAILED)
         }
     }
