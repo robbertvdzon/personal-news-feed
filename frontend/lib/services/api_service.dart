@@ -6,10 +6,14 @@ import '../models/news_request.dart';
 
 class ApiService {
   static final _client = http.Client();
+  static String? _token;
+
+  static void setToken(String? token) => _token = token;
 
   static Map<String, String> get _headers => {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
+        if (_token != null) 'Authorization': 'Bearer $_token',
       };
 
   static Future<List<NewsItem>> fetchNews() async {

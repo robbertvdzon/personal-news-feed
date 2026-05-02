@@ -10,7 +10,7 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final categories = ref.watch(settingsProvider);
-    final auth = ref.watch(authProvider);
+    final auth = ref.watch(authProvider).valueOrNull;
 
     return Scaffold(
       appBar: AppBar(
@@ -25,7 +25,7 @@ class SettingsScreen extends ConsumerWidget {
             margin: const EdgeInsets.only(bottom: 16),
             child: ListTile(
               leading: const CircleAvatar(child: Icon(Icons.person)),
-              title: Text(auth.username ?? 'Gebruiker'),
+              title: Text(auth?.username ?? 'Gebruiker'),
               subtitle: const Text('Ingelogd'),
               trailing: TextButton(
                 onPressed: () => ref.read(authProvider.notifier).logout(),

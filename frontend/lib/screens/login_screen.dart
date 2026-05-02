@@ -12,26 +12,37 @@ class LoginScreen extends ConsumerStatefulWidget {
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
+  final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isRegistering = false;
   bool _obscurePassword = true;
+  bool _loading = false;
 
   @override
   void dispose() {
-    _emailController.dispose();
+    _usernameController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
-  void _submit() {
-    if (_formKey.currentState?.validate() ?? false) {
-      ref.read(authProvider.notifier).login(_emailController.text);
+  Future<void> _submit() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    setState(() => _loading = true);
+
+    final notifier = ref.read(authProvider.notifier);
+    if (_isRegistering) {
+      await notifier.register(_usernameController.text.trim(), _passwordController.text);
+    } else {
+      await notifier.login(_usernameController.text.trim(), _passwordController.text);
     }
+
+    if (mounted) setState(() => _loading = false);
   }
 
   @override
   Widget build(BuildContext context) {
+    final error = ref.watch(authProvider).valueOrNull?.error;
+
     return Scaffold(
       body: SafeArea(
         child: Center(
@@ -54,15 +65,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   child: Column(
                     children: [
                       TextFormField(
-                        controller: _emailController,
+                        controller: _usernameController,
                         decoration: const InputDecoration(
-                          labelText: 'E-mailadres',
-                          prefixIcon: Icon(Icons.email_outlined),
+                          labelText: 'Gebruikersnaam',
+                          prefixIcon: Icon(Icons.person_outline),
                           border: OutlineInputBorder(),
                         ),
-                        keyboardType: TextInputType.emailAddress,
+                        textInputAction: TextInputAction.next,
                         validator: (v) =>
-                            (v == null || v.isEmpty) ? 'Verplicht veld' : null,
+                            (v == null || v.trim().isEmpty) ? 'Verplicht veld' : null,
                       ),
                       const SizedBox(height: 16),
                       TextFormField(
@@ -76,21 +87,54 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             icon: Icon(_obscurePassword
                                 ? Icons.visibility_outlined
                                 : Icons.visibility_off_outlined),
-                            onPressed: () => setState(
-                                () => _obscurePassword = !_obscurePassword),
+                            onPressed: () =>
+                                setState(() => _obscurePassword = !_obscurePassword),
                           ),
                         ),
                         validator: (v) =>
                             (v == null || v.length < 4) ? 'Min. 4 tekens' : null,
                         onFieldSubmitted: (_) => _submit(),
                       ),
+                      if (error != null) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.red[50],
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.red[200]!),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.error_outline,
+                                  size: 16, color: Colors.red[700]),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  error,
+                                  style: TextStyle(
+                                      color: Colors.red[700], fontSize: 13),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 24),
                       SizedBox(
                         width: double.infinity,
                         child: FilledButton(
-                          onPressed: _submit,
-                          child: Text(
-                              _isRegistering ? 'Account aanmaken' : 'Inloggen'),
+                          onPressed: _loading ? null : _submit,
+                          child: _loading
+                              ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2, color: Colors.white),
+                                )
+                              : Text(_isRegistering
+                                  ? 'Account aanmaken'
+                                  : 'Inloggen'),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -101,31 +145,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           _isRegistering
                               ? 'Al een account? Inloggen'
                               : 'Nog geen account? Registreren',
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.amber[50],
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.amber[200]!),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.info_outline,
-                          size: 16, color: Colors.amber[700]),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Mock modus: elke combinatie werkt',
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: Colors.amber[800],
-                                  ),
                         ),
                       ),
                     ],

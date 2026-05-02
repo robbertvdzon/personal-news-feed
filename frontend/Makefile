@@ -10,11 +10,11 @@ DEFINES_PROD  = --dart-define=API_BASE_URL=$(PROD_API)  --dart-define=WS_BASE_UR
 
 # Web tegen lokale backend
 run:
-	flutter run -d chrome $(DEFINES_LOCAL)
+	flutter run -d chrome --web-port=3000 $(DEFINES_LOCAL)
 
 # Web tegen productie backend
 run-prod:
-	flutter run -d chrome $(DEFINES_PROD)
+	flutter run -d chrome --web-port=3000 $(DEFINES_PROD)
 
 # Android tegen lokale backend (vervang IP met jouw machine IP, bv 192.168.1.10)
 run-android-local:

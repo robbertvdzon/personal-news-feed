@@ -41,9 +41,14 @@ class _AuthGate extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final auth = ref.watch(authProvider);
-    if (!auth.isLoggedIn) return const LoginScreen();
-    return const _MainShell();
+    final authAsync = ref.watch(authProvider);
+    return authAsync.when(
+      loading: () => const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      ),
+      error: (_, __) => const LoginScreen(),
+      data: (auth) => auth.isLoggedIn ? const _MainShell() : const LoginScreen(),
+    );
   }
 }
 
