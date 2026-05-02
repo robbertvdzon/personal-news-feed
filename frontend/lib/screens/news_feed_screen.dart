@@ -76,7 +76,7 @@ class _CategoryTabBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final categories = ref.watch(settingsProvider);
+    final categories = ref.watch(settingsProvider).valueOrNull ?? [];
     final enabledCategories = categories.where((c) => c.enabled).toList();
     final selected = ref.watch(selectedCategoryProvider);
 

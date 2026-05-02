@@ -16,9 +16,9 @@ class RequestService(
     private val newsService: NewsService,
     private val webSocketHandler: RequestWebSocketHandler
 ) {
-    fun getAll(): List<NewsRequest> = storageService.loadRequests()
+    fun getAll(username: String): List<NewsRequest> = storageService.loadRequests(username)
 
-    fun create(dto: CreateRequestDto): NewsRequest {
+    fun create(username: String, dto: CreateRequestDto): NewsRequest {
         val request = NewsRequest(
             id = UUID.randomUUID().toString(),
             subject = dto.subject,
@@ -29,46 +29,40 @@ class RequestService(
             status = RequestStatus.PENDING,
             createdAt = Instant.now().toString()
         )
-        saveRequest(request)
-        processAsync(request)
+        saveRequest(username, request)
+        processAsync(username, request)
         return request
     }
 
     @Async
-    fun processAsync(request: NewsRequest) {
-        updateStatus(request.id, RequestStatus.PROCESSING)
-
+    fun processAsync(username: String, request: NewsRequest) {
+        updateStatus(username, request.id, RequestStatus.PROCESSING)
         try {
-            val articles = mockNewsService.fetchArticlesForSubject(
-                request.subject,
-                request.preferredCount
-            )
-            newsService.addItems(articles)
-            updateStatus(request.id, RequestStatus.DONE, articles.size)
+            val articles = mockNewsService.fetchArticlesForSubject(request.subject, request.preferredCount)
+            newsService.addItems(username, articles)
+            updateStatus(username, request.id, RequestStatus.DONE, articles.size)
         } catch (e: Exception) {
-            updateStatus(request.id, RequestStatus.FAILED)
+            updateStatus(username, request.id, RequestStatus.FAILED)
         }
     }
 
-    private fun updateStatus(id: String, status: RequestStatus, newItemCount: Int = 0) {
-        val requests = storageService.loadRequests().toMutableList()
+    private fun updateStatus(username: String, id: String, status: RequestStatus, newItemCount: Int = 0) {
+        val requests = storageService.loadRequests(username).toMutableList()
         val index = requests.indexOfFirst { it.id == id }
         if (index == -1) return
-
         val updated = requests[index].copy(
             status = status,
-            completedAt = if (status == RequestStatus.DONE || status == RequestStatus.FAILED)
-                Instant.now().toString() else null,
+            completedAt = if (status == RequestStatus.DONE || status == RequestStatus.FAILED) Instant.now().toString() else null,
             newItemCount = if (status == RequestStatus.DONE) newItemCount else requests[index].newItemCount
         )
         requests[index] = updated
-        storageService.saveRequests(requests)
+        storageService.saveRequests(username, requests)
         webSocketHandler.broadcast(updated)
     }
 
-    private fun saveRequest(request: NewsRequest) {
-        val requests = storageService.loadRequests().toMutableList()
+    private fun saveRequest(username: String, request: NewsRequest) {
+        val requests = storageService.loadRequests(username).toMutableList()
         requests.add(0, request)
-        storageService.saveRequests(requests)
+        storageService.saveRequests(username, requests)
     }
 }

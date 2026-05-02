@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/category.dart';
 import '../models/news_item.dart';
 import '../providers/news_provider.dart';
 import '../providers/settings_provider.dart';
@@ -31,11 +32,13 @@ class NewsCard extends ConsumerWidget {
     final liked = feedback[item.id];
     final readItems = ref.watch(readItemsProvider);
     final isRead = readItems.contains(item.id);
-    final categories = ref.watch(settingsProvider);
-    final category = categories.firstWhere(
-      (c) => c.id == item.category,
-      orElse: () => categories.first,
-    );
+    final categories = ref.watch(settingsProvider).valueOrNull ?? [];
+    final category = categories.isEmpty
+        ? Category(id: item.category, name: item.category)
+        : categories.firstWhere(
+            (c) => c.id == item.category,
+            orElse: () => categories.first,
+          );
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),

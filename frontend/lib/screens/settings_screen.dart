@@ -9,7 +9,7 @@ class SettingsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final categories = ref.watch(settingsProvider);
+    final categories = ref.watch(settingsProvider).valueOrNull ?? [];
     final auth = ref.watch(authProvider).valueOrNull;
 
     return Scaffold(

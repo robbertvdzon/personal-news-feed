@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../config/app_config.dart';
+import '../models/category.dart';
 import '../models/news_item.dart';
 import '../models/news_request.dart';
 
@@ -38,6 +39,26 @@ class ApiService {
     }
     final list = jsonDecode(response.body) as List<dynamic>;
     return list.map((e) => NewsRequest.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  static Future<List<Category>> fetchSettings() async {
+    final response = await _client.get(
+      Uri.parse('${AppConfig.apiBaseUrl}/api/settings'),
+      headers: _headers,
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Fout bij ophalen instellingen: ${response.statusCode}');
+    }
+    final list = jsonDecode(response.body) as List<dynamic>;
+    return list.map((e) => Category.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  static Future<void> saveSettings(List<Category> categories) async {
+    await _client.put(
+      Uri.parse('${AppConfig.apiBaseUrl}/api/settings'),
+      headers: _headers,
+      body: jsonEncode(categories.map((c) => c.toJson()).toList()),
+    );
   }
 
   static Future<NewsRequest> createRequest({

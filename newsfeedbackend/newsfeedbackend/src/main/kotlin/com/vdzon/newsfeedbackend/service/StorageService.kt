@@ -1,7 +1,9 @@
 package com.vdzon.newsfeedbackend.service
 
+import com.vdzon.newsfeedbackend.model.CategorySettings
 import com.vdzon.newsfeedbackend.model.NewsItem
 import com.vdzon.newsfeedbackend.model.NewsRequest
+import com.vdzon.newsfeedbackend.model.User
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import tools.jackson.databind.ObjectMapper
@@ -13,32 +15,40 @@ class StorageService(
     private val objectMapper: ObjectMapper,
     @Value("\${app.data-dir:./data}") private val dataDir: String
 ) {
-    private val newsFile get() = File(dataDir, "news_items.json").also { it.parentFile.mkdirs() }
-    private val requestsFile get() = File(dataDir, "news_requests.json").also { it.parentFile.mkdirs() }
+    // ── user registry ──────────────────────────────────────────────────────────
+    private val usersFile get() = dataFile("users.json")
 
-    fun loadNews(): List<NewsItem> {
-        if (!newsFile.exists()) return emptyList()
-        return try {
-            objectMapper.readValue(newsFile)
-        } catch (e: Exception) {
-            emptyList()
-        }
+    fun loadUsers(): List<User> = readFile(usersFile) ?: emptyList()
+    fun saveUsers(users: List<User>) = objectMapper.writeValue(usersFile, users)
+    fun getAllUsernames(): List<String> =
+        File(dataDir, "users").let { if (it.isDirectory) it.list()?.toList() ?: emptyList() else emptyList() }
+
+    // ── per-user news ──────────────────────────────────────────────────────────
+    fun loadNews(username: String): List<NewsItem> = readFile(userFile(username, "news_items.json")) ?: emptyList()
+    fun saveNews(username: String, items: List<NewsItem>) = objectMapper.writeValue(userFile(username, "news_items.json"), items)
+
+    // ── per-user requests ──────────────────────────────────────────────────────
+    fun loadRequests(username: String): List<NewsRequest> = readFile(userFile(username, "news_requests.json")) ?: emptyList()
+    fun saveRequests(username: String, requests: List<NewsRequest>) = objectMapper.writeValue(userFile(username, "news_requests.json"), requests)
+
+    // ── per-user settings ──────────────────────────────────────────────────────
+    fun loadSettings(username: String): List<CategorySettings>? = readFile(userFile(username, "settings.json"))
+    fun saveSettings(username: String, settings: List<CategorySettings>) = objectMapper.writeValue(userFile(username, "settings.json"), settings)
+
+    // ── helpers ────────────────────────────────────────────────────────────────
+    private fun userFile(username: String, name: String): File {
+        val dir = File(dataDir, "users/$username")
+        dir.mkdirs()
+        return File(dir, name)
     }
 
-    fun saveNews(items: List<NewsItem>) {
-        objectMapper.writeValue(newsFile, items)
+    private fun dataFile(name: String): File {
+        File(dataDir).mkdirs()
+        return File(dataDir, name)
     }
 
-    fun loadRequests(): List<NewsRequest> {
-        if (!requestsFile.exists()) return emptyList()
-        return try {
-            objectMapper.readValue(requestsFile)
-        } catch (e: Exception) {
-            emptyList()
-        }
-    }
-
-    fun saveRequests(requests: List<NewsRequest>) {
-        objectMapper.writeValue(requestsFile, requests)
+    private inline fun <reified T> readFile(file: File): T? {
+        if (!file.exists()) return null
+        return try { objectMapper.readValue<T>(file) } catch (e: Exception) { null }
     }
 }

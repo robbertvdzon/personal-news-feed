@@ -1,63 +1,50 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/category.dart';
-import '../data/mock_data.dart';
+import '../services/api_service.dart';
 
-class SettingsNotifier extends Notifier<List<Category>> {
+class SettingsNotifier extends AsyncNotifier<List<Category>> {
   @override
-  List<Category> build() {
-    return mockCategories
-        .map((c) => Category(
-              id: c.id,
-              name: c.name,
-              enabled: c.enabled,
-              extraInstructions: c.extraInstructions,
-              isSystem: c.isSystem,
-            ))
-        .toList();
-  }
+  Future<List<Category>> build() => ApiService.fetchSettings();
 
-  void toggleCategory(String categoryId) {
-    state = [
-      for (final cat in state)
-        if (cat.id == categoryId)
-          cat.copyWith(enabled: !cat.enabled)
-        else
-          cat,
-    ];
-  }
+  Future<void> toggleCategory(String categoryId) => _mutate((cats) => [
+        for (final cat in cats)
+          if (cat.id == categoryId) cat.copyWith(enabled: !cat.enabled) else cat,
+      ]);
 
-  void updateExtraInstructions(String categoryId, String instructions) {
-    state = [
-      for (final cat in state)
-        if (cat.id == categoryId)
-          cat.copyWith(extraInstructions: instructions)
-        else
-          cat,
-    ];
-  }
+  Future<void> updateExtraInstructions(String categoryId, String instructions) =>
+      _mutate((cats) => [
+            for (final cat in cats)
+              if (cat.id == categoryId)
+                cat.copyWith(extraInstructions: instructions)
+              else
+                cat,
+          ]);
 
-  void addCategory(String name) {
+  Future<void> addCategory(String name) {
     final id = name.toLowerCase().replaceAll(RegExp(r'\s+'), '_');
-    if (state.any((c) => c.id == id)) return;
-    state = [
-      ...state,
-      Category(id: id, name: name, enabled: true),
-    ];
+    final cats = state.valueOrNull ?? [];
+    if (cats.any((c) => c.id == id)) return Future.value();
+    return _mutate((current) => [
+          ...current,
+          Category(id: id, name: name, enabled: true),
+        ]);
   }
 
-  void removeCategory(String categoryId) {
-    state = state.where((c) => c.id != categoryId).toList();
+  Future<void> removeCategory(String categoryId) =>
+      _mutate((cats) => cats.where((c) => c.id != categoryId).toList());
+
+  Future<void> _mutate(List<Category> Function(List<Category>) updater) async {
+    final current = state.valueOrNull ?? [];
+    final updated = updater(current);
+    state = AsyncData(updated);
+    await ApiService.saveSettings(updated);
   }
 }
 
-final settingsProvider = NotifierProvider<SettingsNotifier, List<Category>>(
-  SettingsNotifier.new,
-);
+final settingsProvider =
+    AsyncNotifierProvider<SettingsNotifier, List<Category>>(SettingsNotifier.new);
 
 final enabledCategoryIdsProvider = Provider<Set<String>>((ref) {
-  return ref
-      .watch(settingsProvider)
-      .where((c) => c.enabled)
-      .map((c) => c.id)
-      .toSet();
+  final cats = ref.watch(settingsProvider).valueOrNull ?? [];
+  return cats.where((c) => c.enabled).map((c) => c.id).toSet();
 });

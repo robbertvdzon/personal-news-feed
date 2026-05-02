@@ -4,6 +4,7 @@ import com.vdzon.newsfeedbackend.model.CreateRequestDto
 import com.vdzon.newsfeedbackend.model.NewsRequest
 import com.vdzon.newsfeedbackend.service.RequestService
 import org.springframework.http.HttpStatus
+import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
@@ -16,9 +17,10 @@ import org.springframework.web.bind.annotation.RestController
 class RequestController(private val requestService: RequestService) {
 
     @GetMapping
-    fun getAll(): List<NewsRequest> = requestService.getAll()
+    fun getAll(auth: Authentication): List<NewsRequest> = requestService.getAll(auth.name)
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    fun create(@RequestBody dto: CreateRequestDto): NewsRequest = requestService.create(dto)
+    fun create(auth: Authentication, @RequestBody dto: CreateRequestDto): NewsRequest =
+        requestService.create(auth.name, dto)
 }

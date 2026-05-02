@@ -172,7 +172,7 @@ class _ArticlePage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final feedback = ref.watch(feedbackProvider);
     final liked = feedback[item.id];
-    final categories = ref.watch(settingsProvider);
+    final categories = ref.watch(settingsProvider).valueOrNull ?? [];
     final category = categories.firstWhere(
       (c) => c.id == item.category,
       orElse: () => categories.first,

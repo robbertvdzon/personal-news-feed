@@ -2,6 +2,7 @@ package com.vdzon.newsfeedbackend.controller
 
 import com.vdzon.newsfeedbackend.model.NewsItem
 import com.vdzon.newsfeedbackend.service.NewsService
+import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestMapping
@@ -12,11 +13,11 @@ import org.springframework.web.bind.annotation.RestController
 class NewsController(private val newsService: NewsService) {
 
     @GetMapping
-    fun getAll(): List<NewsItem> = newsService.getAll()
+    fun getAll(auth: Authentication): List<NewsItem> = newsService.getAll(auth.name)
 
     @PostMapping("/refresh")
-    fun refresh(): Map<String, String> {
-        newsService.refresh()
+    fun refresh(auth: Authentication): Map<String, String> {
+        newsService.refresh(auth.name)
         return mapOf("status" to "ok")
     }
 }
