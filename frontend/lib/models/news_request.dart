@@ -17,6 +17,8 @@ class NewsRequest {
   final double costUsd;
   final bool isDailyUpdate;
   final List<CategoryResult> categoryResults;
+  final DateTime? processingStartedAt;
+  final int durationSeconds;
 
   const NewsRequest({
     required this.id,
@@ -33,6 +35,8 @@ class NewsRequest {
     this.costUsd = 0.0,
     this.isDailyUpdate = false,
     this.categoryResults = const [],
+    this.processingStartedAt,
+    this.durationSeconds = 0,
   });
 
   factory NewsRequest.fromJson(Map<String, dynamic> json) {
@@ -58,6 +62,10 @@ class NewsRequest {
               ?.map((e) => CategoryResult.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
+      processingStartedAt: json['processingStartedAt'] != null
+          ? DateTime.parse(json['processingStartedAt'] as String)
+          : null,
+      durationSeconds: json['durationSeconds'] as int? ?? 0,
     );
   }
 
@@ -77,6 +85,8 @@ class NewsRequest {
     bool clearCompletedAt = false,
     double? costUsd,
     List<CategoryResult>? categoryResults,
+    DateTime? processingStartedAt,
+    int? durationSeconds,
   }) {
     return NewsRequest(
       id: id,
@@ -93,6 +103,8 @@ class NewsRequest {
       costUsd: costUsd ?? this.costUsd,
       isDailyUpdate: isDailyUpdate,
       categoryResults: categoryResults ?? this.categoryResults,
+      processingStartedAt: processingStartedAt ?? this.processingStartedAt,
+      durationSeconds: durationSeconds ?? this.durationSeconds,
     );
   }
 }

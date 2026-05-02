@@ -156,12 +156,30 @@ class _DailyUpdateTile extends ConsumerWidget {
                   ),
                   const Spacer(),
                   if (request.status == RequestStatus.done)
-                    Text(
-                      '${request.newItemCount} artikel${request.newItemCount != 1 ? 'en' : ''} toegevoegd',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.primary,
-                            fontWeight: FontWeight.w500,
+                    Row(
+                      children: [
+                        Text(
+                          '${request.newItemCount} art.',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Theme.of(context).colorScheme.primary,
+                                fontWeight: FontWeight.w500,
+                              ),
+                        ),
+                        if (request.costUsd > 0) ...[
+                          const SizedBox(width: 6),
+                          Text(
+                            _formatCents(request.costUsd),
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey[500]),
                           ),
+                        ],
+                        if (request.durationSeconds > 0) ...[
+                          const SizedBox(width: 6),
+                          Text(
+                            _formatDuration(request.durationSeconds),
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey[500]),
+                          ),
+                        ],
+                      ],
                     ),
                   if (request.status == RequestStatus.processing)
                     Row(
@@ -175,7 +193,7 @@ class _DailyUpdateTile extends ConsumerWidget {
                           ),
                         ),
                         const SizedBox(width: 6),
-                        _ElapsedTimeText(since: request.createdAt),
+                        _ElapsedTimeText(since: request.processingStartedAt ?? request.createdAt),
                       ],
                     ),
                   if (request.status == RequestStatus.done ||
@@ -383,12 +401,30 @@ class _RequestTile extends ConsumerWidget {
                   ),
                   const Spacer(),
                   if (request.status == RequestStatus.done)
-                    Text(
-                      '${request.newItemCount} artikel${request.newItemCount != 1 ? 'en' : ''} toegevoegd',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.primary,
-                            fontWeight: FontWeight.w500,
+                    Row(
+                      children: [
+                        Text(
+                          '${request.newItemCount} art.',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Theme.of(context).colorScheme.primary,
+                                fontWeight: FontWeight.w500,
+                              ),
+                        ),
+                        if (request.costUsd > 0) ...[
+                          const SizedBox(width: 6),
+                          Text(
+                            _formatCents(request.costUsd),
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey[500]),
                           ),
+                        ],
+                        if (request.durationSeconds > 0) ...[
+                          const SizedBox(width: 6),
+                          Text(
+                            _formatDuration(request.durationSeconds),
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey[500]),
+                          ),
+                        ],
+                      ],
                     ),
                   if (request.status == RequestStatus.processing)
                     Row(
@@ -402,7 +438,7 @@ class _RequestTile extends ConsumerWidget {
                           ),
                         ),
                         const SizedBox(width: 6),
-                        _ElapsedTimeText(since: request.createdAt),
+                        _ElapsedTimeText(since: request.processingStartedAt ?? request.createdAt),
                       ],
                     ),
                   if (request.status == RequestStatus.done ||
@@ -574,6 +610,21 @@ class _StatusChip extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 // Add Request Dialog
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+String _formatCents(double costUsd) {
+  final cents = costUsd * 100;
+  return cents < 1 ? '${(cents * 10).round() / 10}¢' : '${cents.toStringAsFixed(1)}¢';
+}
+
+String _formatDuration(int seconds) {
+  final m = seconds ~/ 60;
+  final s = seconds % 60;
+  return m > 0 ? '${m}m ${s}s' : '${s}s';
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Elapsed time widget — telt de verstreken tijd elke seconde

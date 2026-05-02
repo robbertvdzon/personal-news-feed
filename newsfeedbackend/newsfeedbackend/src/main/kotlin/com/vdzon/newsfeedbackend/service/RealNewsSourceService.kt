@@ -32,9 +32,9 @@ class RealNewsSourceService(
         val categoryResults = mutableListOf<CategoryResult>()
         var totalCost = 0.0
 
-        categories.filter { it.enabled }.forEach { cat ->
+        categories.filter { it.enabled && !it.isSystem }.forEach { cat ->
             log.info("Fase 1: artikelen zoeken voor categorie '{}'", cat.name)
-            val (refs, searchCost) = anthropicService.findArticlesForCategory(cat, count = 5)
+            val (refs, searchCost) = anthropicService.findArticlesForCategory(cat, count = cat.preferredCount)
             totalCost += searchCost
 
             if (refs.isEmpty()) {

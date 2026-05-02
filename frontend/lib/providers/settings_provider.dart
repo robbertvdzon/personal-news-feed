@@ -25,6 +25,21 @@ class SettingsNotifier extends AsyncNotifier<List<Category>> {
                 cat,
           ]);
 
+  Future<void> updateName(String categoryId, String name) =>
+      _mutate((cats) => [
+            for (final cat in cats)
+              if (cat.id == categoryId) cat.copyWith(name: name) else cat,
+          ]);
+
+  Future<void> updateCounts(String categoryId, int preferredCount, int maxCount) =>
+      _mutate((cats) => [
+            for (final cat in cats)
+              if (cat.id == categoryId)
+                cat.copyWith(preferredCount: preferredCount, maxCount: maxCount)
+              else
+                cat,
+          ]);
+
   Future<void> addCategory(String name) {
     final id = name.toLowerCase().replaceAll(RegExp(r'\s+'), '_');
     final cats = state.valueOrNull ?? [];

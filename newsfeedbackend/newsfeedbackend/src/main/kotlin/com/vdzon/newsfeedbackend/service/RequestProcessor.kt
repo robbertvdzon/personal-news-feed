@@ -74,14 +74,22 @@ class RequestProcessor(
         username: String, id: String, status: RequestStatus,
         newItemCount: Int = 0, costUsd: Double = 0.0
     ) {
+        val now = Instant.now()
         val requests = storageService.loadRequests(username).toMutableList()
         val index = requests.indexOfFirst { it.id == id }
         if (index == -1) return
-        val updated = requests[index].copy(
+        val current = requests[index]
+        val isDone = status == RequestStatus.DONE || status == RequestStatus.FAILED
+        val duration = if (isDone && current.processingStartedAt != null)
+            (now.toEpochMilli() - Instant.parse(current.processingStartedAt).toEpochMilli()) / 1000
+        else current.durationSeconds.toLong()
+        val updated = current.copy(
             status = status,
-            completedAt = if (status == RequestStatus.DONE || status == RequestStatus.FAILED) Instant.now().toString() else null,
-            newItemCount = if (status == RequestStatus.DONE) newItemCount else requests[index].newItemCount,
-            costUsd = if (status == RequestStatus.DONE) costUsd else requests[index].costUsd
+            processingStartedAt = if (status == RequestStatus.PROCESSING) now.toString() else current.processingStartedAt,
+            completedAt = if (isDone) now.toString() else null,
+            newItemCount = if (status == RequestStatus.DONE) newItemCount else current.newItemCount,
+            costUsd = if (status == RequestStatus.DONE) costUsd else current.costUsd,
+            durationSeconds = if (isDone) duration.toInt() else current.durationSeconds
         )
         requests[index] = updated
         storageService.saveRequests(username, requests)
@@ -92,15 +100,23 @@ class RequestProcessor(
         username: String, id: String, status: RequestStatus,
         newItemCount: Int, costUsd: Double, categoryResults: List<CategoryResult>
     ) {
+        val now = Instant.now()
         val requests = storageService.loadRequests(username).toMutableList()
         val index = requests.indexOfFirst { it.id == id }
         if (index == -1) return
-        val updated = requests[index].copy(
+        val current = requests[index]
+        val isDone = status == RequestStatus.DONE || status == RequestStatus.FAILED
+        val duration = if (isDone && current.processingStartedAt != null)
+            (now.toEpochMilli() - Instant.parse(current.processingStartedAt).toEpochMilli()) / 1000
+        else current.durationSeconds.toLong()
+        val updated = current.copy(
             status = status,
-            completedAt = if (status == RequestStatus.DONE || status == RequestStatus.FAILED) Instant.now().toString() else null,
+            processingStartedAt = if (status == RequestStatus.PROCESSING) now.toString() else current.processingStartedAt,
+            completedAt = if (isDone) now.toString() else null,
             newItemCount = newItemCount,
             costUsd = costUsd,
-            categoryResults = categoryResults
+            categoryResults = categoryResults,
+            durationSeconds = if (isDone) duration.toInt() else current.durationSeconds
         )
         requests[index] = updated
         storageService.saveRequests(username, requests)

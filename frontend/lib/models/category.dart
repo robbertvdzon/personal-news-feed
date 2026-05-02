@@ -1,9 +1,11 @@
 class Category {
   final String id;
-  final String name;
+  String name;
   bool enabled;
   String extraInstructions;
   final bool isSystem;
+  int preferredCount;
+  int maxCount;
 
   Category({
     required this.id,
@@ -11,6 +13,8 @@ class Category {
     this.enabled = true,
     this.extraInstructions = '',
     this.isSystem = false,
+    this.preferredCount = 3,
+    this.maxCount = 5,
   });
 
   factory Category.fromJson(Map<String, dynamic> json) => Category(
@@ -19,6 +23,8 @@ class Category {
         enabled: json['enabled'] as bool? ?? true,
         extraInstructions: json['extraInstructions'] as String? ?? '',
         isSystem: json['isSystem'] as bool? ?? false,
+        preferredCount: json['preferredCount'] as int? ?? 3,
+        maxCount: json['maxCount'] as int? ?? 5,
       );
 
   Map<String, dynamic> toJson() => {
@@ -27,13 +33,24 @@ class Category {
         'enabled': enabled,
         'extraInstructions': extraInstructions,
         'isSystem': isSystem,
+        'preferredCount': preferredCount,
+        'maxCount': maxCount,
       };
 
-  Category copyWith({bool? enabled, String? extraInstructions}) => Category(
+  Category copyWith({
+    String? name,
+    bool? enabled,
+    String? extraInstructions,
+    int? preferredCount,
+    int? maxCount,
+  }) =>
+      Category(
         id: id,
-        name: name,
+        name: name ?? this.name,
         enabled: enabled ?? this.enabled,
         extraInstructions: extraInstructions ?? this.extraInstructions,
         isSystem: isSystem,
+        preferredCount: preferredCount ?? this.preferredCount,
+        maxCount: maxCount ?? this.maxCount,
       );
 }
