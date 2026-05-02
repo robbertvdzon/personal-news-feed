@@ -85,6 +85,17 @@ class ApiService {
     );
   }
 
+  static Future<NewsRequest> rerunRequest(String id) async {
+    final response = await _client.post(
+      Uri.parse('${AppConfig.apiBaseUrl}/api/requests/$id/rerun'),
+      headers: _headers,
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Fout bij herstart verzoek: ${response.statusCode}');
+    }
+    return NewsRequest.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
   static Future<void> markRead(String id) async {
     await _client.put(
       Uri.parse('${AppConfig.apiBaseUrl}/api/news/$id/read'),

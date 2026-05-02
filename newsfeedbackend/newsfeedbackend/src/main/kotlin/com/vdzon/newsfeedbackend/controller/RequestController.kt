@@ -30,4 +30,8 @@ class RequestController(private val requestService: RequestService) {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     fun delete(auth: Authentication, @PathVariable id: String) =
         requestService.delete(auth.name, id)
+
+    @PostMapping("/{id}/rerun")
+    fun rerun(auth: Authentication, @PathVariable id: String): NewsRequest =
+        requestService.rerun(auth.name, id)
 }

@@ -132,9 +132,13 @@ class AnthropicService(
 
             val root = objectMapper.readTree(response)
             val text = root.path("content").path(0).path("text").asText()
+            log.debug("Claude response tekst (eerste 500 tekens): {}", text.take(500))
 
             val json = extractJson(text)
-            objectMapper.readValue<List<SummarizedArticle>>(json)
+            val result = objectMapper.readValue<List<SummarizedArticle>>(json)
+            log.info("Claude leverde {} artikelen terug", result.size)
+            if (result.isEmpty()) log.warn("Claude gaf lege lijst terug. Raw JSON: {}", json.take(200))
+            result
         } catch (e: Exception) {
             log.error("Claude aanroep mislukt: {}", e.message)
             emptyList()

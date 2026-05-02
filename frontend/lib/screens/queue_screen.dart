@@ -23,23 +23,34 @@ class QueueScreen extends ConsumerWidget {
       ),
       body: requestsAsync.isLoading
           ? const Center(child: CircularProgressIndicator())
-          : requests.isEmpty
-          ? const Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.inbox_outlined, size: 48, color: Colors.grey),
-                  SizedBox(height: 12),
-                  Text('Geen verzoeken', style: TextStyle(color: Colors.grey)),
-                ],
-              ),
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.only(bottom: 88),
-              itemCount: requests.length,
-              itemBuilder: (context, index) {
-                return _RequestTile(request: requests[index]);
-              },
+          : RefreshIndicator(
+              onRefresh: () => ref.read(requestProvider.notifier).refresh(),
+              child: requests.isEmpty
+                  ? LayoutBuilder(
+                      builder: (context, constraints) => SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        child: SizedBox(
+                          height: constraints.maxHeight,
+                          child: const Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.inbox_outlined, size: 48, color: Colors.grey),
+                                SizedBox(height: 12),
+                                Text('Geen verzoeken', style: TextStyle(color: Colors.grey)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.only(bottom: 88),
+                      itemCount: requests.length,
+                      itemBuilder: (context, index) {
+                        return _RequestTile(request: requests[index]);
+                      },
+                    ),
             ),
     );
   }
@@ -86,7 +97,10 @@ class _RequestTile extends ConsumerWidget {
       onDismissed: (_) => ref.read(requestProvider.notifier).deleteRequest(request.id),
       child: Card(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-        child: Padding(
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => _showDetail(context, ref),
+          child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -205,6 +219,71 @@ class _RequestTile extends ConsumerWidget {
             ],
           ),
         ),
+        ), // InkWell
+      ),
+    );
+  }
+
+  void _showDetail(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(request.subject),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (request.sourceItemTitle != null) ...[
+              Text('Gebaseerd op:', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+              const SizedBox(height: 2),
+              Text(request.sourceItemTitle!, style: const TextStyle(fontSize: 13)),
+              const SizedBox(height: 12),
+            ],
+            if (request.extraInstructions.isNotEmpty) ...[
+              Text('Extra instructies:', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+              const SizedBox(height: 2),
+              Text(request.extraInstructions, style: const TextStyle(fontSize: 13)),
+              const SizedBox(height: 12),
+            ],
+            Row(children: [
+              const Icon(Icons.tune, size: 14, color: Colors.grey),
+              const SizedBox(width: 4),
+              Text('${request.preferredCount}–${request.maxCount} artikelen',
+                  style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+            ]),
+            const SizedBox(height: 4),
+            Row(children: [
+              const Icon(Icons.schedule, size: 14, color: Colors.grey),
+              const SizedBox(width: 4),
+              Text(_formatTime(request.createdAt),
+                  style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+            ]),
+            if (request.status == RequestStatus.done) ...[
+              const SizedBox(height: 4),
+              Row(children: [
+                const Icon(Icons.article, size: 14, color: Colors.green),
+                const SizedBox(width: 4),
+                Text('${request.newItemCount} artikelen toegevoegd',
+                    style: const TextStyle(color: Colors.green, fontSize: 12)),
+              ]),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Sluiten'),
+          ),
+          if (request.status == RequestStatus.done || request.status == RequestStatus.failed)
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.pop(context);
+                ref.read(requestProvider.notifier).rerunRequest(request);
+              },
+              icon: const Icon(Icons.replay, size: 16),
+              label: const Text('Opnieuw'),
+            ),
+        ],
       ),
     );
   }

@@ -45,6 +45,22 @@ class RequestService(
         storageService.saveRequests(username, requests)
     }
 
+    fun rerun(username: String, id: String): NewsRequest {
+        val requests = storageService.loadRequests(username).toMutableList()
+        val index = requests.indexOfFirst { it.id == id }
+        if (index == -1) throw IllegalArgumentException("Request niet gevonden: $id")
+        val reset = requests[index].copy(
+            status = RequestStatus.PENDING,
+            completedAt = null,
+            newItemCount = 0
+        )
+        requests[index] = reset
+        storageService.saveRequests(username, requests)
+        webSocketHandler.broadcast(reset)
+        processAsync(username, reset)
+        return reset
+    }
+
     @Async
     fun processAsync(username: String, request: NewsRequest) {
         updateStatus(username, request.id, RequestStatus.PROCESSING)

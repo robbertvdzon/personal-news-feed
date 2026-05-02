@@ -43,13 +43,24 @@ class RequestNotifier extends AsyncNotifier<List<NewsRequest>> {
       final updated = NewsRequest.fromJson(json);
       final current = state.valueOrNull ?? [];
       final index = current.indexWhere((r) => r.id == updated.id);
-      if (index == -1) return;
+      if (index == -1) {
+        // ID niet gevonden - mogelijk race condition met temp-ID: refresh hele lijst
+        _refreshSilent();
+        return;
+      }
       final newList = [...current];
       newList[index] = updated;
       state = AsyncData(newList);
       if (updated.status == RequestStatus.done) {
         ref.read(newsProvider.notifier).refresh();
       }
+    } catch (_) {}
+  }
+
+  Future<void> _refreshSilent() async {
+    try {
+      final requests = await ApiService.fetchRequests();
+      state = AsyncData(requests);
     } catch (_) {}
   }
 
@@ -112,14 +123,15 @@ class RequestNotifier extends AsyncNotifier<List<NewsRequest>> {
   }
 
   Future<void> rerunRequest(NewsRequest request) async {
-    await addRequest(
-      subject: request.subject,
-      sourceItemId: request.sourceItemId,
-      sourceItemTitle: request.sourceItemTitle,
-      preferredCount: request.preferredCount,
-      maxCount: request.maxCount,
-      extraInstructions: request.extraInstructions,
-    );
+    // Optimistisch status resetten
+    final current = state.valueOrNull ?? [];
+    final index = current.indexWhere((r) => r.id == request.id);
+    if (index != -1) {
+      final newList = [...current];
+      newList[index] = request.copyWith(status: RequestStatus.pending);
+      state = AsyncData(newList);
+    }
+    await ApiService.rerunRequest(request.id);
   }
 
   Future<void> refresh() async {

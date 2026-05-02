@@ -60,6 +60,7 @@ class NewsRequest {
     RequestStatus? status,
     DateTime? completedAt,
     int? newItemCount,
+    bool clearCompletedAt = false,
   }) {
     return NewsRequest(
       id: id,
@@ -68,9 +69,10 @@ class NewsRequest {
       sourceItemTitle: sourceItemTitle,
       preferredCount: preferredCount,
       maxCount: maxCount,
+      extraInstructions: extraInstructions,
       status: status ?? this.status,
       createdAt: createdAt,
-      completedAt: completedAt ?? this.completedAt,
+      completedAt: clearCompletedAt ? null : (completedAt ?? this.completedAt),
       newItemCount: newItemCount ?? this.newItemCount,
     );
   }

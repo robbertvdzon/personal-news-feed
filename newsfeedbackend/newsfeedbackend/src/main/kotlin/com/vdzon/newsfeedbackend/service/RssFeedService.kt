@@ -59,9 +59,9 @@ class RssFeedService {
         "https://news.ycombinator.com/rss",
         "https://dev.to/feed",
         "https://www.theregister.com/headlines.atom",
-        "https://feeds.reuters.com/reuters/topNews",
         "https://feeds.bbci.co.uk/news/rss.xml",
-        "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml"
+        "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml",
+        "https://feeds.feedburner.com/TheHackersNews"
     )
 
     fun fetchForCategory(category: String, maxAgeDays: Long = 7): List<RawArticle> {
