@@ -11,8 +11,12 @@ DEFINES_PROD  = --dart-define=API_BASE_URL=$(PROD_API)  --dart-define=WS_BASE_UR
 
 .PHONY: run run-ext run-prod run-android run-android-ext run-android-local build build-local clean
 
-# Web tegen lokale backend
+# Web tegen extern IP (tijdelijk port-forwarded)
 run:
+	flutter run -d chrome --web-port=3000 $(DEFINES_EXT)
+
+# Web tegen lokale backend
+run-local:
 	flutter run -d chrome --web-port=3000 $(DEFINES_LOCAL)
 
 # Web tegen extern IP (tijdelijk port-forwarded)
@@ -36,6 +40,14 @@ run-android-local:
 # Android tegen productie
 run-android:
 	flutter run -d android $(DEFINES_PROD)
+
+# APK tegen extern IP (tijdelijk port-forwarded)
+build-apk-ext:
+	flutter build apk --release $(DEFINES_EXT)
+
+# APK productie
+build-apk:
+	flutter build apk --release $(DEFINES_PROD)
 
 # Productie web build
 build:
