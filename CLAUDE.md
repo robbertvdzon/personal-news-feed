@@ -2,11 +2,18 @@
 
 ## Repo-structuur
 
+Alles staat in één mono-repo. GitHub Actions workflows triggeren alleen op wijzigingen
+in hun eigen subfolder.
+
 ```
 personal-news-feed/
   frontend/    ← Flutter app
   backend/     ← Kotlin/Spring microservice
   gitops/      ← ArgoCD + OpenShift manifests
+  .github/
+    workflows/
+      frontend.yml   ← triggert alleen op frontend/**
+      backend.yml    ← triggert alleen op backend/**
   CLAUDE.md
 ```
 
@@ -16,9 +23,12 @@ personal-news-feed/
 
 - **Frontend:** Flutter (Android + Web)
 - **Backend:** Kotlin, Spring Boot 3, Spring AI (Anthropic API)
-- **Database:** Firebase Firestore
-- **Auth:** Firebase Authentication
-- **Deploy:** OpenShift (thuis-pc), GitOps via ArgoCD
+- **Database:** PostgreSQL (draait in OpenShift, geen backup — bewust)
+- **Auth:** Keycloak (draait in OpenShift, OpenID Connect)
+- **Container registry:** GitHub Container Registry (ghcr.io)
+- **CI/CD:** GitHub Actions
+- **Deploy:** OpenShift single-node (thuis-pc), GitOps via ArgoCD
+- **Externe toegang:** Cloudflare Tunnel (geen open poorten thuis)
 - **Taal in de app:** Nederlands
 - **Nieuwsitems taal:** Nederlands
 
@@ -36,33 +46,48 @@ Standaard categorieën:
 
 ---
 
-## Firestore datamodel
+## Database (PostgreSQL)
 
+Draait als container in OpenShift via de Crunchy PostgreSQL Operator.
+Geen backup geconfigureerd — bewuste keuze voor dit project.
+
+```sql
+news_items
+  id            UUID PRIMARY KEY
+  title         TEXT
+  summary       TEXT        -- Nederlandse samenvatting gegenereerd door Claude
+  url           TEXT UNIQUE -- gebruikt voor deduplicatie
+  category      TEXT
+  published_at  TIMESTAMPTZ
+  source        TEXT
+  created_at    TIMESTAMPTZ DEFAULT now()
+
+user_feedback
+  id         UUID PRIMARY KEY
+  user_id    TEXT
+  item_id    UUID REFERENCES news_items(id)
+  liked      BOOLEAN
+  created_at TIMESTAMPTZ DEFAULT now()
+  UNIQUE (user_id, item_id)
+
+user_preferences
+  id          UUID PRIMARY KEY
+  user_id     TEXT UNIQUE
+  updated_at  TIMESTAMPTZ DEFAULT now()
+
+user_categories
+  id                 UUID PRIMARY KEY
+  user_preference_id UUID REFERENCES user_preferences(id)
+  name               TEXT
+  enabled            BOOLEAN DEFAULT true
+  extra_instructions TEXT
 ```
-news_items/
-  {id}:
-    title: string
-    summary: string        ← Nederlandse samenvatting gegenereerd door Claude
-    url: string
-    category: string
-    timestamp: timestamp
-    source: string
 
-user_feedback/
-  {userId}_{itemId}:
-    liked: boolean
-    timestamp: timestamp
+## Auth (Keycloak)
 
-user_preferences/
-  {userId}:
-    categories: [
-      {
-        name: string
-        enabled: boolean
-        extra_instructions: string   ← bijv. "niet over prijs"
-      }
-    ]
-```
+Draait als container in OpenShift via de Keycloak Operator (OperatorHub).
+Flutter gebruikt OpenID Connect (OIDC) om in te loggen.
+De backend valideert JWT-tokens van Keycloak.
 
 ---
 
@@ -72,7 +97,7 @@ user_preferences/
 
 ### Schermen
 
-1. **Login scherm** – Firebase Auth (nog te implementeren)
+1. **Login scherm** – Keycloak OIDC (nog te implementeren)
 2. **News feed** – lijst van nieuwsitems als cards
 3. **Item detail** – volledige samenvatting + link naar bron + prev/next navigatie
 4. **Instellingen** – categorieën aan/uit + extra instructies per categorie
@@ -101,6 +126,13 @@ user_preferences/
 - Dart package naam: `personal_news_feed`
 - Widgets klein en gesplitst in losse bestanden
 - Nederlandstalige comments zijn prima
+
+### CI/CD
+
+GitHub Actions workflow (`frontend.yml`) triggert alleen bij wijzigingen in `frontend/**`:
+- Bouwt Flutter web app
+- Bouwt Docker image en pusht naar `ghcr.io`
+- Werkt image tag bij in `gitops/manifests/frontend-deployment.yaml`
 
 ---
 
@@ -155,37 +187,107 @@ backend/
       RedditService.kt         ← Reddit API integratie
       FilterService.kt         ← stap 1: relevantiecheck via Spring AI
       SummaryService.kt        ← stap 2: samenvatting + categorie via Spring AI
-      FirestoreService.kt      ← opslaan in Firestore
+      PostgresService.kt       ← opslaan in PostgreSQL
     scheduler/NewsFeedScheduler.kt
   src/main/resources/application.yml
   build.gradle.kts
   Dockerfile
 ```
 
+### CI/CD
+
+GitHub Actions workflow (`backend.yml`) triggert alleen bij wijzigingen in `backend/**`:
+- Bouwt Kotlin/Spring Boot jar
+- Bouwt Docker image en pusht naar `ghcr.io`
+- Werkt image tag bij in `gitops/manifests/backend-deployment.yaml`
+
 ---
 
-## GitOps (`gitops/`)
+## Infra & GitOps (`gitops/`)
 
-**Flow:** push naar `main` → ArgoCD detecteert wijziging → deployed naar OpenShift
+### Infrastructuur
+
+- **Hardware:** mini-pc thuis, single-node OpenShift, SSD storage
+- **Externe toegang:** Cloudflare Tunnel als container in OpenShift — geen open poorten thuis
+  - `api.jouwdomein.nl` → backend API
+  - `app.jouwdomein.nl` → frontend
+- **Beheer:** kubeconfig en admin access alleen lokaal; geen externe toegang tot het cluster zelf
+
+### GitOps-flow
+
+```
+code push naar main
+  └── GitHub Actions bouwt image → pusht naar ghcr.io
+        └── pipeline commit: update image tag in gitops/manifests/
+              └── ArgoCD detecteert wijziging → rolt uit naar OpenShift
+```
+
+ArgoCD wordt geïnstalleerd via OperatorHub. Één bootstrap Application wordt handmatig
+aangemaakt om ArgoCD aan de repo te koppelen. Daarna beheert ArgoCD zichzelf en alle
+andere applicaties via Git.
+
+### Secrets
+
+Secrets worden handmatig aangemaakt in OpenShift (niet in Git).
+Toekomstige migratie naar Sealed Secrets zodat ook secrets via GitOps beheerd kunnen worden.
+
+Benodigde secrets:
+- `ANTHROPIC_API_KEY`
+- `NEWS_API_KEY`
+- PostgreSQL wachtwoord
+- Keycloak admin wachtwoord
+- Cloudflare Tunnel token
+
+### Repo-structuur
 
 ```
 gitops/
   argocd/
-    application.yaml           ← ArgoCD Application manifest
+    application-backend.yaml     ← ArgoCD Application voor backend
+    application-frontend.yaml    ← ArgoCD Application voor frontend
+    application-infra.yaml       ← ArgoCD Application voor infra (tunnel, etc.)
   manifests/
-    namespace.yaml
-    deployment.yaml
-    service.yaml
-    route.yaml                 ← OpenShift Route (i.p.v. Ingress)
-    configmap.yaml             ← cron-expressie, RSS-urls, etc.
-    secret.yaml                ← template (Anthropic API key, Firebase credentials)
+    infra/
+      namespace.yaml
+      cloudflare-tunnel.yaml
+      postgres.yaml              ← Crunchy PostgreSQL Operator CR
+      keycloak.yaml              ← Keycloak Operator CR
+    backend/
+      deployment.yaml
+      service.yaml
+      route.yaml
+      configmap.yaml             ← cron-expressie, RSS-urls, subreddits, etc.
+      secret-template.yaml       ← structuur zonder waarden
+    frontend/
+      deployment.yaml
+      service.yaml
+      route.yaml
 ```
 
-### OpenShift namespace
+### Database & Auth
 
-`personal-news-feed`
+PostgreSQL en Keycloak draaien beide als containers in OpenShift:
+- **PostgreSQL** via Crunchy PostgreSQL Operator
+- **Keycloak** via Keycloak Operator (OperatorHub)
 
-### Secrets (niet in repo, template wel)
+Beide worden via GitOps beheerd (manifests in `gitops/manifests/infra/`).
 
-- `ANTHROPIC_API_KEY`
-- Firebase service account JSON
+### GitHub Actions — path filters
+
+Elke workflow triggert alleen op zijn eigen subfolder:
+
+```yaml
+# backend.yml
+on:
+  push:
+    paths:
+      - 'backend/**'
+
+# frontend.yml
+on:
+  push:
+    paths:
+      - 'frontend/**'
+
+# ArgoCD reageert automatisch alleen op wijzigingen in gitops/**
+```
