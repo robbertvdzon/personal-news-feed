@@ -33,12 +33,12 @@ class RssFeedService {
         ),
         "ai" to listOf(
             "https://blogs.microsoft.com/ai/feed/",
-            "https://openai.com/blog/rss/",
-            "https://www.deepmind.com/blog/rss.xml"
+            "https://www.deepmind.com/blog/rss.xml",
+            "https://huggingface.co/blog/feed.xml"
         ),
         "blockchain" to listOf(
             "https://cointelegraph.com/rss",
-            "https://coindesk.com/arc/outboundfeeds/rss/"
+            "https://bitcoinmagazine.com/.rss/full/"
         ),
         "spring" to listOf(
             "https://spring.io/blog.atom",
