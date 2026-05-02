@@ -25,6 +25,33 @@ class NewsRequest {
     this.newItemCount = 0,
   });
 
+  factory NewsRequest.fromJson(Map<String, dynamic> json) {
+    return NewsRequest(
+      id: json['id'] as String,
+      subject: json['subject'] as String,
+      sourceItemId: json['sourceItemId'] as String?,
+      sourceItemTitle: json['sourceItemTitle'] as String?,
+      preferredCount: json['preferredCount'] as int? ?? 2,
+      maxCount: json['maxCount'] as int? ?? 5,
+      status: RequestStatus.values.byName(
+        (json['status'] as String).toLowerCase(),
+      ),
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      completedAt: json['completedAt'] != null
+          ? DateTime.parse(json['completedAt'] as String)
+          : null,
+      newItemCount: json['newItemCount'] as int? ?? 0,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'subject': subject,
+        if (sourceItemId != null) 'sourceItemId': sourceItemId,
+        if (sourceItemTitle != null) 'sourceItemTitle': sourceItemTitle,
+        'preferredCount': preferredCount,
+        'maxCount': maxCount,
+      };
+
   NewsRequest copyWith({
     RequestStatus? status,
     DateTime? completedAt,

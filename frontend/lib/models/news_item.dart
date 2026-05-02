@@ -16,4 +16,16 @@ class NewsItem {
     required this.timestamp,
     required this.source,
   });
+
+  factory NewsItem.fromJson(Map<String, dynamic> json) {
+    return NewsItem(
+      id: json['id'] as String,
+      title: json['title'] as String,
+      summary: json['summary'] as String,
+      url: json['url'] as String,
+      category: json['category'] as String,
+      timestamp: DateTime.parse(json['timestamp'] as String),
+      source: json['source'] as String,
+    );
+  }
 }

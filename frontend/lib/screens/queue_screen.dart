@@ -8,7 +8,8 @@ class QueueScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final requests = ref.watch(requestProvider);
+    final requestsAsync = ref.watch(requestProvider);
+    final requests = requestsAsync.valueOrNull ?? [];
 
     return Scaffold(
       appBar: AppBar(
@@ -20,7 +21,9 @@ class QueueScreen extends ConsumerWidget {
         icon: const Icon(Icons.add),
         label: const Text('Nieuw verzoek'),
       ),
-      body: requests.isEmpty
+      body: requestsAsync.isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : requests.isEmpty
           ? const Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,

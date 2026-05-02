@@ -1,65 +1,92 @@
+import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
+import '../config/app_config.dart';
 import '../models/news_request.dart';
+import '../services/api_service.dart';
 
-class RequestNotifier extends Notifier<List<NewsRequest>> {
+class RequestNotifier extends AsyncNotifier<List<NewsRequest>> {
+  WebSocketChannel? _channel;
+
   @override
-  List<NewsRequest> build() => [
-        NewsRequest(
-          id: 'r1',
-          subject: 'Rust async runtime vergelijking',
-          preferredCount: 2,
-          maxCount: 5,
-          status: RequestStatus.done,
-          createdAt: DateTime.now().subtract(const Duration(hours: 3)),
-          completedAt: DateTime.now().subtract(const Duration(hours: 2)),
-          newItemCount: 2,
-        ),
-        NewsRequest(
-          id: 'r2',
-          subject: 'Ethereum Layer 2 oplossingen',
-          sourceItemTitle: 'Ethereum voltooit Pectra-upgrade',
-          preferredCount: 3,
-          maxCount: 5,
-          status: RequestStatus.processing,
-          createdAt: DateTime.now().subtract(const Duration(minutes: 15)),
-        ),
-        NewsRequest(
-          id: 'r3',
-          subject: 'Spring AI praktijkvoorbeelden',
-          preferredCount: 2,
-          maxCount: 4,
-          status: RequestStatus.pending,
-          createdAt: DateTime.now().subtract(const Duration(minutes: 5)),
-        ),
-      ];
+  Future<List<NewsRequest>> build() async {
+    final requests = await ApiService.fetchRequests();
+    _connectWebSocket();
+    ref.onDispose(_disconnect);
+    return requests;
+  }
 
-  void addRequest({
+  void _connectWebSocket() {
+    try {
+      _channel = WebSocketChannel.connect(
+        Uri.parse('${AppConfig.wsBaseUrl}/ws/requests'),
+      );
+      _channel!.stream.listen(
+        _onMessage,
+        onError: (_) => _scheduleReconnect(),
+        onDone: _scheduleReconnect,
+      );
+    } catch (_) {
+      _scheduleReconnect();
+    }
+  }
+
+  void _onMessage(dynamic message) {
+    try {
+      final json = jsonDecode(message as String) as Map<String, dynamic>;
+      final updated = NewsRequest.fromJson(json);
+      final current = state.valueOrNull ?? [];
+      final index = current.indexWhere((r) => r.id == updated.id);
+      if (index == -1) return;
+      final newList = [...current];
+      newList[index] = updated;
+      state = AsyncData(newList);
+    } catch (_) {}
+  }
+
+  void _scheduleReconnect() {
+    Future.delayed(const Duration(seconds: 5), () {
+      if (state is! AsyncError) _connectWebSocket();
+    });
+  }
+
+  void _disconnect() {
+    _channel?.sink.close();
+    _channel = null;
+  }
+
+  Future<void> addRequest({
     required String subject,
     String? sourceItemId,
     String? sourceItemTitle,
     int preferredCount = 2,
     int maxCount = 5,
-  }) {
-    final request = NewsRequest(
-      id: 'r${DateTime.now().millisecondsSinceEpoch}',
+  }) async {
+    final newRequest = await ApiService.createRequest(
       subject: subject,
       sourceItemId: sourceItemId,
       sourceItemTitle: sourceItemTitle,
       preferredCount: preferredCount,
       maxCount: maxCount,
-      status: RequestStatus.pending,
-      createdAt: DateTime.now(),
     );
-    state = [request, ...state];
+    final current = state.valueOrNull ?? [];
+    state = AsyncData([newRequest, ...current]);
+  }
+
+  Future<void> refresh() async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(ApiService.fetchRequests);
+    _connectWebSocket();
   }
 }
 
 final requestProvider =
-    NotifierProvider<RequestNotifier, List<NewsRequest>>(RequestNotifier.new);
+    AsyncNotifierProvider<RequestNotifier, List<NewsRequest>>(
+        RequestNotifier.new);
 
 final activeRequestCountProvider = Provider<int>((ref) {
-  return ref
-      .watch(requestProvider)
+  final requests = ref.watch(requestProvider).valueOrNull ?? [];
+  return requests
       .where((r) =>
           r.status == RequestStatus.pending ||
           r.status == RequestStatus.processing)

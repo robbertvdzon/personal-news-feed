@@ -11,6 +11,7 @@ class NewsFeedScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final items = ref.watch(filteredNewsProvider);
+    final isLoading = ref.watch(newsLoadingProvider);
     final showRead = ref.watch(showReadProvider);
     final readCount = ref.watch(readCountProvider);
 
@@ -50,12 +51,12 @@ class NewsFeedScreen extends ConsumerWidget {
           child: _CategoryTabBar(),
         ),
       ),
-      body: items.isEmpty
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : items.isEmpty
           ? _EmptyState(showRead: showRead, readCount: readCount)
           : RefreshIndicator(
-              onRefresh: () async {
-                await Future.delayed(const Duration(milliseconds: 800));
-              },
+              onRefresh: () => ref.read(newsProvider.notifier).refresh(),
               child: ListView.builder(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 itemCount: items.length,

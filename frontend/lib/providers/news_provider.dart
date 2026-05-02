@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/news_item.dart';
-import '../data/mock_data.dart';
+import '../services/api_service.dart';
 import 'settings_provider.dart';
 
 // 👍/👎 feedback per item
@@ -19,9 +19,7 @@ class FeedbackNotifier extends Notifier<Map<String, bool>> {
 }
 
 final feedbackProvider =
-    NotifierProvider<FeedbackNotifier, Map<String, bool>>(
-  FeedbackNotifier.new,
-);
+    NotifierProvider<FeedbackNotifier, Map<String, bool>>(FeedbackNotifier.new);
 
 // Gelezen items
 class ReadItemsNotifier extends Notifier<Set<String>> {
@@ -44,14 +42,29 @@ final selectedCategoryProvider = StateProvider<String?>((ref) => null);
 // Toon ook al-gelezen items
 final showReadProvider = StateProvider<bool>((ref) => false);
 
-// Gefilterde en gesorteerde nieuwslijst
+// Nieuws van de backend
+class NewsNotifier extends AsyncNotifier<List<NewsItem>> {
+  @override
+  Future<List<NewsItem>> build() => ApiService.fetchNews();
+
+  Future<void> refresh() async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(ApiService.fetchNews);
+  }
+}
+
+final newsProvider =
+    AsyncNotifierProvider<NewsNotifier, List<NewsItem>>(NewsNotifier.new);
+
+// Gefilterde nieuwslijst (leeg tijdens laden)
 final filteredNewsProvider = Provider<List<NewsItem>>((ref) {
+  final items = ref.watch(newsProvider).valueOrNull ?? [];
   final enabledIds = ref.watch(enabledCategoryIdsProvider);
   final selectedCategory = ref.watch(selectedCategoryProvider);
   final showRead = ref.watch(showReadProvider);
   final readItems = ref.watch(readItemsProvider);
 
-  return mockNewsItems
+  return items
       .where((item) => enabledIds.contains(item.category))
       .where((item) =>
           selectedCategory == null || item.category == selectedCategory)
@@ -60,13 +73,19 @@ final filteredNewsProvider = Provider<List<NewsItem>>((ref) {
     ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
 });
 
-// Aantal gelezen items in de huidige filtercombinatie (voor de knoplabel)
+// Of de nieuws-feed nog aan het laden is
+final newsLoadingProvider = Provider<bool>((ref) {
+  return ref.watch(newsProvider).isLoading;
+});
+
+// Aantal gelezen items in de huidige filtercombinatie
 final readCountProvider = Provider<int>((ref) {
+  final items = ref.watch(newsProvider).valueOrNull ?? [];
   final enabledIds = ref.watch(enabledCategoryIdsProvider);
   final selectedCategory = ref.watch(selectedCategoryProvider);
   final readItems = ref.watch(readItemsProvider);
 
-  return mockNewsItems
+  return items
       .where((item) => enabledIds.contains(item.category))
       .where((item) =>
           selectedCategory == null || item.category == selectedCategory)

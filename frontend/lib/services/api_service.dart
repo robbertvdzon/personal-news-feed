@@ -1,0 +1,63 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import '../config/app_config.dart';
+import '../models/news_item.dart';
+import '../models/news_request.dart';
+
+class ApiService {
+  static final _client = http.Client();
+
+  static Map<String, String> get _headers => {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      };
+
+  static Future<List<NewsItem>> fetchNews() async {
+    final response = await _client.get(
+      Uri.parse('${AppConfig.apiBaseUrl}/api/news'),
+      headers: _headers,
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Fout bij ophalen nieuws: ${response.statusCode}');
+    }
+    final list = jsonDecode(response.body) as List<dynamic>;
+    return list.map((e) => NewsItem.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  static Future<List<NewsRequest>> fetchRequests() async {
+    final response = await _client.get(
+      Uri.parse('${AppConfig.apiBaseUrl}/api/requests'),
+      headers: _headers,
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Fout bij ophalen verzoeken: ${response.statusCode}');
+    }
+    final list = jsonDecode(response.body) as List<dynamic>;
+    return list.map((e) => NewsRequest.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  static Future<NewsRequest> createRequest({
+    required String subject,
+    String? sourceItemId,
+    String? sourceItemTitle,
+    int preferredCount = 2,
+    int maxCount = 5,
+  }) async {
+    final body = jsonEncode({
+      'subject': subject,
+      if (sourceItemId != null) 'sourceItemId': sourceItemId,
+      if (sourceItemTitle != null) 'sourceItemTitle': sourceItemTitle,
+      'preferredCount': preferredCount,
+      'maxCount': maxCount,
+    });
+    final response = await _client.post(
+      Uri.parse('${AppConfig.apiBaseUrl}/api/requests'),
+      headers: _headers,
+      body: body,
+    );
+    if (response.statusCode != 201) {
+      throw Exception('Fout bij aanmaken verzoek: ${response.statusCode}');
+    }
+    return NewsRequest.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  }
+}
