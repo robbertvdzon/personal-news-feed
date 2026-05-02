@@ -22,7 +22,7 @@ personal-news-feed/
 ## Tech stack
 
 - **Frontend:** Flutter (Android + Web)
-- **Backend:** Kotlin, Spring Boot 3, Spring AI (Anthropic API)
+- **Backend:** Kotlin, Spring Boot 3, Spring AI (Anthropic API), WebSocket
 - **Database:** PostgreSQL (draait in OpenShift, geen backup — bewust)
 - **Auth:** Keycloak (draait in OpenShift, OpenID Connect)
 - **Container registry:** GitHub Container Registry (ghcr.io)
@@ -43,6 +43,7 @@ Standaard categorieën:
 - **Crypto** – Niet over prijsnieuws, maar technische ontwikkelingen, adoptie door grote bedrijven of landen, regelgeving, nieuwe protocollen
 - **Podcasts** – Tips voor nieuwe of interessante podcasts om te ontdekken
 - **Software ontwikkeling** – Nieuws over programmeertalen, frameworks, tools, best practices
+- **Overig** – Artikelen die niet in een van de bovenstaande categorieën passen
 
 ---
 
@@ -57,7 +58,7 @@ news_items
   title         TEXT
   summary       TEXT        -- Nederlandse samenvatting gegenereerd door Claude
   url           TEXT UNIQUE -- gebruikt voor deduplicatie
-  category      TEXT
+  category      TEXT        -- incl. 'overig' voor niet-passende artikelen
   published_at  TIMESTAMPTZ
   source        TEXT
   created_at    TIMESTAMPTZ DEFAULT now()
@@ -81,6 +82,17 @@ user_categories
   name               TEXT
   enabled            BOOLEAN DEFAULT true
   extra_instructions TEXT
+
+news_requests
+  id               UUID PRIMARY KEY
+  user_id          TEXT
+  subject          TEXT        -- onderwerp om nieuws over te zoeken
+  source_item_id   UUID REFERENCES news_items(id) NULL  -- optioneel: vanuit artikel
+  preferred_count  INT DEFAULT 2
+  max_count        INT DEFAULT 5
+  status           TEXT        -- pending / processing / done / failed
+  created_at       TIMESTAMPTZ DEFAULT now()
+  completed_at     TIMESTAMPTZ
 ```
 
 ## Auth (Keycloak)
@@ -93,32 +105,45 @@ De backend valideert JWT-tokens van Keycloak.
 
 ## Frontend (`frontend/`)
 
-**Stack:** Flutter, Riverpod
+**Stack:** Flutter, Riverpod, WebSocket
 
 ### Schermen
 
-1. **Login scherm** – Keycloak OIDC (nog te implementeren)
+1. **Login / registratie** – Keycloak OIDC
 2. **News feed** – lijst van nieuwsitems als cards
+   - Categorie-tabs bovenin (scrollbaar, inclusief "Overig")
+   - Ongelezen-indicator per item (blauwe stip)
+   - Badge bovenin met totaal aantal ongelezen items
+   - "Gelezen / Verberg gelezen" toggle
+   - Indicator dat er actieve requests in de queue zijn
 3. **Item detail** – volledige samenvatting + link naar bron + prev/next navigatie
-4. **Instellingen** – categorieën aan/uit + extra instructies per categorie
+   - Knop "Meer hierover" → maakt een news request aan
+4. **Queue** – overzicht van alle news requests
+   - Live statusupdates via WebSocket (wachtend / bezig / klaar)
+   - Nieuw request handmatig aanmaken (vrij onderwerp invullen)
+   - Bij aanmaken: gewenst aantal (bij voorkeur X, max Y)
+5. **Instellingen**
+   - Categorieën aan/uit + extra instructies per categorie
+   - Eigen categorieën toevoegen en verwijderen
 
 ### Per nieuwsitem tonen
 
-- Categoriebadge (kleurgecodeerd)
+- Categoriebadge (kleurgecodeerd, ook voor "Overig")
 - Titel
-- Korte samenvatting (Nederlands, ~250 woorden)
+- Samenvatting (Nederlands, ~250 woorden)
 - Tijdstip
 - 👍 / 👎 knoppen
 - Link naar origineel artikel
+- Knop "Meer hierover"
 
-### Huidige staat
+### Huidige staat (mock)
 
 - Werkt met hardcoded mockdata (13 items, alle 4 categorieën)
 - Scrollbare categorie-tabs bovenin
 - Ongelezen-indicator (blauwe stip), items worden gelezen gemarkeerd bij openen
 - "Gelezen / Verberg gelezen" toggle knop
 - Prev/next navigatie in detail screen (swipe + knoppen)
-- Nog geen Firebase-koppeling
+- Nog geen koppeling met backend API
 
 ### Coding conventies
 
@@ -138,16 +163,38 @@ GitHub Actions workflow (`frontend.yml`) triggert alleen bij wijzigingen in `fro
 
 ## Backend (`backend/`)
 
-**Stack:** Kotlin, Spring Boot 3, Spring AI (Anthropic)
+**Stack:** Kotlin, Spring Boot 3, Spring AI (Anthropic), WebSocket
 
-### Wat het doet
+### Verantwoordelijkheden
 
-1. Haalt meerdere keren per dag nieuws op via meerdere bron-types
-2. Filtert irrelevante items goedkoop weg (stap 1: past item bij een categorie?)
-3. Laat Claude per relevant item een Nederlandse samenvatting maken (~250 woorden) en categorie toewijzen (stap 2)
-4. Slaat nieuwe items op in Firestore (duplicaten overslaan op basis van URL)
-5. Draait als `@Scheduled` cron-job, configureerbaar via `application.yml`
-6. Exposeert `POST /api/refresh` om handmatig een run te triggeren
+1. **Geplande nieuwsrun** – haalt meerdere keren per dag nieuws op, filtert en verwerkt
+2. **News request queue** – verwerkt door gebruikers ingediende zoekopdrachten
+3. **REST API** – levert nieuws en queue-data aan de frontend
+4. **WebSocket** – pusht live statusupdates van queue-items naar verbonden clients
+
+### REST API endpoints
+
+```
+GET    /api/news                  ← gefilterd op categorie, gelezen-status, paginering
+GET    /api/news/{id}             ← enkel artikel
+POST   /api/news/{id}/feedback    ← 👍/👎 opslaan
+
+GET    /api/requests              ← queue van de ingelogde gebruiker
+POST   /api/requests              ← nieuw news request aanmaken
+GET    /api/requests/{id}         ← status van één request
+
+GET    /api/preferences           ← gebruikersvoorkeuren en categorieën
+PUT    /api/preferences           ← voorkeuren opslaan
+
+POST   /api/refresh               ← handmatig nieuwsrun triggeren (admin)
+```
+
+### WebSocket
+
+- Endpoint: `ws://api.jouwdomein.nl/ws`
+- De backend pusht een bericht naar de client zodra een news request van status wisselt
+- Berichtformaat: `{ requestId, status, newItemCount }` (JSON)
+- De frontend herlaadt de bijbehorende items na ontvangst
 
 ### Nieuws-bronnen
 
@@ -161,17 +208,23 @@ Voorbeelden — volledig uitbreidbaar:
 
 #### NewsAPI.org (gratis tier: 100 calls/dag)
 - Doorzoekt honderden nieuwsbronnen tegelijk
-- Handig voor brede dekking zonder per-site RSS-urls te beheren
 - Vereist `NEWS_API_KEY`
 
 #### Reddit (gratis, ruime limieten)
 - Subreddits configureerbaar, bijv: `r/MachineLearning`, `r/rust`, `r/Bitcoin`, `r/programming`
-- Levert actuele discussies en links die traditionele nieuwssites missen
 
 ### Verwerking in twee stappen (kostenbesparing)
 
-1. **Filter** (goedkoop, klein model): is dit item relevant voor een van de ingestelde categorieën?
-2. **Samenvatting** (uitgebreider, groter model): alleen voor items die de filter halen — Nederlandse samenvatting ~250 woorden + categorie toewijzen
+1. **Filter** (goedkoop, klein model): is dit item relevant voor een van de ingestelde categorieën? Zo nee → categorie "overig"
+2. **Samenvatting** (groter model): Nederlandse samenvatting ~250 woorden + categorie toewijzen
+
+### News request verwerking
+
+- Backend pikt `pending` requests op en zet ze op `processing`
+- Zoekt nieuws op basis van het opgegeven onderwerp
+- Genereert samenvattingen voor gevonden items
+- Respecteert `preferred_count` en `max_count` — alleen echt interessante items boven het voorkeur-aantal worden toegevoegd
+- Zet request op `done` en notificeert frontend via WebSocket
 
 ### Projectstructuur
 
@@ -180,15 +233,26 @@ backend/
   src/main/kotlin/com/vdzon/newsfeed/
     NewsFeedApplication.kt
     config/AppConfig.kt
-    model/NewsItem.kt
+    model/
+      NewsItem.kt
+      NewsRequest.kt
+    api/
+      NewsController.kt
+      RequestController.kt
+      PreferencesController.kt
+    websocket/
+      NewsWebSocketHandler.kt
     service/
-      RssFetchService.kt       ← RSS ophalen en parsen
-      NewsApiService.kt        ← NewsAPI.org integratie
-      RedditService.kt         ← Reddit API integratie
-      FilterService.kt         ← stap 1: relevantiecheck via Spring AI
-      SummaryService.kt        ← stap 2: samenvatting + categorie via Spring AI
-      PostgresService.kt       ← opslaan in PostgreSQL
-    scheduler/NewsFeedScheduler.kt
+      RssFetchService.kt
+      NewsApiService.kt
+      RedditService.kt
+      FilterService.kt
+      SummaryService.kt
+      RequestProcessorService.kt  ← verwerkt news requests uit de queue
+      PostgresService.kt
+    scheduler/
+      NewsFeedScheduler.kt        ← geplande nieuwsrun
+      RequestQueueScheduler.kt    ← pikt pending requests op
   src/main/resources/application.yml
   build.gradle.kts
   Dockerfile
@@ -209,7 +273,7 @@ GitHub Actions workflow (`backend.yml`) triggert alleen bij wijzigingen in `back
 
 - **Hardware:** mini-pc thuis, single-node OpenShift, SSD storage
 - **Externe toegang:** Cloudflare Tunnel als container in OpenShift — geen open poorten thuis
-  - `api.jouwdomein.nl` → backend API
+  - `api.jouwdomein.nl` → backend API + WebSocket
   - `app.jouwdomein.nl` → frontend
 - **Beheer:** kubeconfig en admin access alleen lokaal; geen externe toegang tot het cluster zelf
 
@@ -243,9 +307,9 @@ Benodigde secrets:
 ```
 gitops/
   argocd/
-    application-backend.yaml     ← ArgoCD Application voor backend
-    application-frontend.yaml    ← ArgoCD Application voor frontend
-    application-infra.yaml       ← ArgoCD Application voor infra (tunnel, etc.)
+    application-backend.yaml
+    application-frontend.yaml
+    application-infra.yaml
   manifests/
     infra/
       namespace.yaml
@@ -257,7 +321,7 @@ gitops/
       service.yaml
       route.yaml
       configmap.yaml             ← cron-expressie, RSS-urls, subreddits, etc.
-      secret-template.yaml       ← structuur zonder waarden
+      secret-template.yaml
     frontend/
       deployment.yaml
       service.yaml
@@ -273,8 +337,6 @@ PostgreSQL en Keycloak draaien beide als containers in OpenShift:
 Beide worden via GitOps beheerd (manifests in `gitops/manifests/infra/`).
 
 ### GitHub Actions — path filters
-
-Elke workflow triggert alleen op zijn eigen subfolder:
 
 ```yaml
 # backend.yml
