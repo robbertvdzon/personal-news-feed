@@ -21,6 +21,9 @@ frontend/build/
 backend/.gradle/
 backend/build/
 backend/out/
+newsfeedbackend/**/build/
+newsfeedbackend/**/target/
+newsfeedbackend/**/data/
 *.jar
 *.war
 
