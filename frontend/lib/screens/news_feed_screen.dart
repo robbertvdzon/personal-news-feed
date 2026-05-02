@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/news_provider.dart';
 import '../providers/settings_provider.dart';
 import '../widgets/news_card.dart';
-import 'settings_screen.dart';
 
 class NewsFeedScreen extends ConsumerWidget {
   const NewsFeedScreen({super.key});
@@ -35,14 +34,6 @@ class NewsFeedScreen extends ConsumerWidget {
                       ? 'Gelezen ($readCount)'
                       : 'Gelezen',
               style: const TextStyle(fontSize: 13),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            tooltip: 'Instellingen',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const SettingsScreen()),
             ),
           ),
         ],

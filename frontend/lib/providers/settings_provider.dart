@@ -11,6 +11,7 @@ class SettingsNotifier extends Notifier<List<Category>> {
               name: c.name,
               enabled: c.enabled,
               extraInstructions: c.extraInstructions,
+              isSystem: c.isSystem,
             ))
         .toList();
   }
@@ -33,6 +34,19 @@ class SettingsNotifier extends Notifier<List<Category>> {
         else
           cat,
     ];
+  }
+
+  void addCategory(String name) {
+    final id = name.toLowerCase().replaceAll(RegExp(r'\s+'), '_');
+    if (state.any((c) => c.id == id)) return;
+    state = [
+      ...state,
+      Category(id: id, name: name, enabled: true),
+    ];
+  }
+
+  void removeCategory(String categoryId) {
+    state = state.where((c) => c.id != categoryId).toList();
   }
 }
 

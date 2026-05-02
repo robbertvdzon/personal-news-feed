@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/news_item.dart';
 import '../providers/news_provider.dart';
+import '../providers/request_provider.dart';
 import '../providers/settings_provider.dart';
 import '../widgets/category_badge.dart';
 
@@ -264,7 +265,112 @@ class _ArticlePage extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 16),
+          _MeerHieroverButton(item: item),
+          const SizedBox(height: 16),
         ],
+      ),
+    );
+  }
+}
+
+class _MeerHieroverButton extends ConsumerWidget {
+  final NewsItem item;
+
+  const _MeerHieroverButton({required this.item});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Center(
+      child: OutlinedButton.icon(
+        onPressed: () => _showDialog(context, ref),
+        icon: const Icon(Icons.search, size: 18),
+        label: const Text('Meer hierover'),
+      ),
+    );
+  }
+
+  void _showDialog(BuildContext context, WidgetRef ref) {
+    int preferredCount = 3;
+    int maxCount = 5;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Meer hierover'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                item.title,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontStyle: FontStyle.italic,
+                      color: Colors.grey[600],
+                    ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 16),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Voorkeur: $preferredCount artikelen',
+                      style: Theme.of(context).textTheme.bodySmall),
+                  Slider(
+                    value: preferredCount.toDouble(),
+                    min: 1,
+                    max: 10,
+                    divisions: 9,
+                    label: '$preferredCount',
+                    onChanged: (v) => setState(() {
+                      preferredCount = v.round();
+                      if (maxCount < preferredCount) maxCount = preferredCount;
+                    }),
+                  ),
+                  Text('Maximum: $maxCount artikelen',
+                      style: Theme.of(context).textTheme.bodySmall),
+                  Slider(
+                    value: maxCount.toDouble(),
+                    min: 1,
+                    max: 20,
+                    divisions: 19,
+                    label: '$maxCount',
+                    onChanged: (v) => setState(() {
+                      maxCount = v.round();
+                      if (preferredCount > maxCount) preferredCount = maxCount;
+                    }),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Annuleren'),
+            ),
+            FilledButton(
+              onPressed: () {
+                ref.read(requestProvider.notifier).addRequest(
+                      subject: item.title,
+                      sourceItemId: item.id,
+                      sourceItemTitle: item.title,
+                      preferredCount: preferredCount,
+                      maxCount: maxCount,
+                    );
+                Navigator.of(context).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Verzoek toegevoegd aan wachtrij'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              },
+              child: const Text('Toevoegen'),
+            ),
+          ],
+        ),
       ),
     );
   }

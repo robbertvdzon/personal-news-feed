@@ -26,6 +26,13 @@ final List<Category> mockCategories = [
     enabled: true,
     extraInstructions: '',
   ),
+  Category(
+    id: 'overig',
+    name: 'Overig',
+    enabled: true,
+    extraInstructions: '',
+    isSystem: true,
+  ),
 ];
 
 final List<NewsItem> mockNewsItems = [

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/auth_provider.dart';
 import '../providers/settings_provider.dart';
 import '../models/category.dart';
 
@@ -9,6 +10,7 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final categories = ref.watch(settingsProvider);
+    final auth = ref.watch(authProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -17,13 +19,23 @@ class SettingsScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text(
-            'Categorieën',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey[700],
-                ),
+          // Account section
+          _SectionHeader('Account'),
+          Card(
+            margin: const EdgeInsets.only(bottom: 16),
+            child: ListTile(
+              leading: const CircleAvatar(child: Icon(Icons.person)),
+              title: Text(auth.username ?? 'Gebruiker'),
+              subtitle: const Text('Ingelogd'),
+              trailing: TextButton(
+                onPressed: () => ref.read(authProvider.notifier).logout(),
+                child: const Text('Uitloggen'),
+              ),
+            ),
           ),
+
+          // Categories section
+          _SectionHeader('Categorieën'),
           const SizedBox(height: 4),
           Text(
             'Kies welke categorieën je wilt zien en voeg optioneel extra instructies toe.',
@@ -34,6 +46,79 @@ class SettingsScreen extends ConsumerWidget {
           const SizedBox(height: 16),
           ...categories.map(
             (cat) => _CategoryCard(category: cat),
+          ),
+          const SizedBox(height: 8),
+          _AddCategoryButton(),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  final String title;
+  const _SectionHeader(this.title);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(
+        title,
+        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[700],
+            ),
+      ),
+    );
+  }
+}
+
+class _AddCategoryButton extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return OutlinedButton.icon(
+      onPressed: () => _showAddDialog(context, ref),
+      icon: const Icon(Icons.add),
+      label: const Text('Categorie toevoegen'),
+    );
+  }
+
+  void _showAddDialog(BuildContext context, WidgetRef ref) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Nieuwe categorie'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Naam',
+            border: OutlineInputBorder(),
+          ),
+          onSubmitted: (value) {
+            if (value.trim().isNotEmpty) {
+              ref.read(settingsProvider.notifier).addCategory(value.trim());
+              Navigator.of(context).pop();
+            }
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Annuleren'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (controller.text.trim().isNotEmpty) {
+                ref
+                    .read(settingsProvider.notifier)
+                    .addCategory(controller.text.trim());
+                Navigator.of(context).pop();
+              }
+            },
+            child: const Text('Toevoegen'),
           ),
         ],
       ),
@@ -67,6 +152,32 @@ class _CategoryCardState extends ConsumerState<_CategoryCard> {
     super.dispose();
   }
 
+  void _confirmDelete(BuildContext context, WidgetRef ref, Category cat) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Categorie verwijderen'),
+        content: Text('Wil je "${cat.name}" verwijderen?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Annuleren'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.red,
+            ),
+            onPressed: () {
+              ref.read(settingsProvider.notifier).removeCategory(cat.id);
+              Navigator.of(context).pop();
+            },
+            child: const Text('Verwijderen'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final cat = widget.category;
@@ -90,6 +201,13 @@ class _CategoryCardState extends ConsumerState<_CategoryCard> {
                         ),
                   ),
                 ),
+                if (!cat.isSystem)
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, size: 18),
+                    color: Colors.red[400],
+                    tooltip: 'Verwijder categorie',
+                    onPressed: () => _confirmDelete(context, ref, cat),
+                  ),
                 Switch(
                   value: cat.enabled,
                   onChanged: (_) => ref
