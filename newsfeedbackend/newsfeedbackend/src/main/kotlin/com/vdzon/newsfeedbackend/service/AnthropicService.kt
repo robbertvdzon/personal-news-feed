@@ -1,17 +1,26 @@
 package com.vdzon.newsfeedbackend.service
 
+import com.vdzon.newsfeedbackend.model.CategorySettings
+import com.vdzon.newsfeedbackend.model.NewsItem
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.web.client.RestClient
 import tools.jackson.databind.ObjectMapper
 import tools.jackson.module.kotlin.readValue
+import java.time.Instant
+import java.util.UUID
 
 data class SummarizedArticle(
     val title: String,
     val summary: String,
     val url: String,
     val source: String
+)
+
+data class ClaudeSearchResult(
+    val articles: List<SummarizedArticle>,
+    val costUsd: Double
 )
 
 @Service
@@ -32,27 +41,19 @@ class AnthropicService(
             .build()
     }
 
-    fun summarizeForCategory(
-        articles: List<RawArticle>,
-        category: String,
-        categoryName: String,
-        count: Int,
-        extraInstructions: String = ""
-    ): List<SummarizedArticle> {
-        if (articles.isEmpty()) return emptyList()
-
-        val articleList = articles.take(40).joinToString("\n---\n") { a ->
-            "Titel: ${a.title}\nBron: ${a.source}\nURL: ${a.url}\nBeschrijving: ${a.description}"
-        }
-
-        val extra = if (extraInstructions.isNotBlank()) "\nExtra instructies: $extraInstructions" else ""
+    fun searchAndSummarizeForCategory(
+        category: CategorySettings,
+        count: Int
+    ): ClaudeSearchResult {
+        val extra = if (category.extraInstructions.isNotBlank())
+            "\nExtra instructies: ${category.extraInstructions}" else ""
 
         val prompt = """
             Je bent een Nederlandse tech-nieuwsredacteur.
 
-            Selecteer de $count meest interessante en recente artikelen over "$categoryName" uit de lijst hieronder.$extra
+            Zoek via het web naar de $count meest interessante en recente nieuwsartikelen over "${category.name}".$extra
 
-            Schrijf voor elk artikel een uitgebreide samenvatting van circa 800 woorden.
+            Schrijf voor elk gevonden artikel een uitgebreide samenvatting van circa 800 woorden.
             Gebruik meerdere alinea's gescheiden door een lege regel.
             Schrijf de INHOUD van het artikel — wat er is gebeurd, wat er is gezegd, wat de bevindingen zijn.
             Leg NIET uit wat het artikel behandelt of beschrijft. Geef gewoon de informatie zelf.
@@ -66,35 +67,24 @@ class AnthropicService(
                 "source": "naam van de bron"
               }
             ]
-
-            Artikelen:
-            $articleList
         """.trimIndent()
 
-        return callClaude(prompt)
+        return callClaudeWithSearch(prompt)
     }
 
-    fun summarizeForSubject(
-        articles: List<RawArticle>,
+    fun searchAndSummarizeForSubject(
         subject: String,
         count: Int,
         extraInstructions: String = ""
-    ): List<SummarizedArticle> {
-        if (articles.isEmpty()) return emptyList()
-
-        val articleList = articles.take(60).joinToString("\n---\n") { a ->
-            "Titel: ${a.title}\nBron: ${a.source}\nURL: ${a.url}\nBeschrijving: ${a.description}"
-        }
-
+    ): ClaudeSearchResult {
         val extra = if (extraInstructions.isNotBlank()) "\nExtra instructies: $extraInstructions" else ""
 
         val prompt = """
             Je bent een Nederlandse tech-nieuwsredacteur.
 
-            Zoek uit de lijst hieronder de $count artikelen die het meest relevant zijn voor het onderwerp: "$subject".$extra
-            Als er te weinig relevante artikelen zijn, kies dan de best passende.
+            Zoek via het web naar de $count meest interessante en recente nieuwsartikelen over "$subject".$extra
 
-            Schrijf voor elk artikel een uitgebreide samenvatting van circa 800 woorden.
+            Schrijf voor elk gevonden artikel een uitgebreide samenvatting van circa 800 woorden.
             Gebruik meerdere alinea's gescheiden door een lege regel.
             Schrijf de INHOUD van het artikel — wat er is gebeurd, wat er is gezegd, wat de bevindingen zijn.
             Leg NIET uit wat het artikel behandelt of beschrijft. Geef gewoon de informatie zelf.
@@ -108,41 +98,76 @@ class AnthropicService(
                 "source": "naam van de bron"
               }
             ]
-
-            Artikelen:
-            $articleList
         """.trimIndent()
 
-        return callClaude(prompt)
+        return callClaudeWithSearch(prompt)
     }
 
-    private fun callClaude(prompt: String): List<SummarizedArticle> {
+    private fun callClaudeWithSearch(prompt: String): ClaudeSearchResult {
         val body = mapOf(
             "model" to model,
-            "max_tokens" to 16000,
+            "max_tokens" to 8000,
+            "tools" to listOf(
+                mapOf("type" to "web_search_20250305", "name" to "web_search")
+            ),
             "messages" to listOf(mapOf("role" to "user", "content" to prompt))
         )
+        val bodyJson = objectMapper.writeValueAsString(body)
 
-        return try {
-            val response = client.post()
-                .uri("/v1/messages")
-                .body(objectMapper.writeValueAsString(body))
-                .retrieve()
-                .body(String::class.java) ?: return emptyList()
+        val maxRetries = 4
+        var delayMs = 15_000L  // start met 15 seconden bij 429
 
-            val root = objectMapper.readTree(response)
-            val text = root.path("content").path(0).path("text").asText()
-            log.debug("Claude response tekst (eerste 500 tekens): {}", text.take(500))
+        repeat(maxRetries) { attempt ->
+            try {
+                val response = client.post()
+                    .uri("/v1/messages")
+                    .body(bodyJson)
+                    .retrieve()
+                    .body(String::class.java) ?: return ClaudeSearchResult(emptyList(), 0.0)
 
-            val json = extractJson(text)
-            val result = objectMapper.readValue<List<SummarizedArticle>>(json)
-            log.info("Claude leverde {} artikelen terug", result.size)
-            if (result.isEmpty()) log.warn("Claude gaf lege lijst terug. Raw JSON: {}", json.take(200))
-            result
-        } catch (e: Exception) {
-            log.error("Claude aanroep mislukt: {}", e.message)
-            emptyList()
+                val root = objectMapper.readTree(response)
+
+                // Extract cost
+                val usage = root.path("usage")
+                val inputTokens = usage.path("input_tokens").asLong(0)
+                val outputTokens = usage.path("output_tokens").asLong(0)
+                val webSearchRequests = usage.path("server_tool_use").path("web_search_requests").asLong(0)
+                val costUsd = inputTokens * 3e-6 + outputTokens * 15e-6 + webSearchRequests * 0.01
+                log.info("Claude kosten: {} input, {} output, {} web searches = \${}", inputTokens, outputTokens, webSearchRequests, "%.4f".format(costUsd))
+
+                // Extract text from content array (filter for type=text blocks)
+                val contentArray = root.path("content")
+                val textParts = mutableListOf<String>()
+                for (i in 0 until contentArray.size()) {
+                    val node = contentArray.get(i)
+                    if (node.path("type").asText() == "text") {
+                        textParts.add(node.path("text").asText())
+                    }
+                }
+                val text = textParts.joinToString("\n")
+
+                log.debug("Claude response tekst (eerste 500 tekens): {}", text.take(500))
+
+                val json = extractJson(text)
+                val articles = objectMapper.readValue<List<SummarizedArticle>>(json)
+                log.info("Claude leverde {} artikelen terug", articles.size)
+                if (articles.isEmpty()) log.warn("Claude gaf lege lijst terug. Raw JSON: {}", json.take(200))
+
+                return ClaudeSearchResult(articles, costUsd)
+
+            } catch (e: Exception) {
+                val is429 = e.message?.contains("429") == true || e.message?.contains("rate_limit") == true
+                if (is429 && attempt < maxRetries - 1) {
+                    log.warn("Claude rate limit (poging {}), wacht {} seconden...", attempt + 1, delayMs / 1000)
+                    Thread.sleep(delayMs)
+                    delayMs *= 2  // exponential backoff
+                } else {
+                    log.error("Claude web search aanroep mislukt (poging {}): {}", attempt + 1, e.message)
+                    return ClaudeSearchResult(emptyList(), 0.0)
+                }
+            }
         }
+        return ClaudeSearchResult(emptyList(), 0.0)
     }
 
     private fun extractJson(text: String): String {

@@ -1,3 +1,5 @@
+import 'category_result.dart';
+
 enum RequestStatus { pending, processing, done, failed }
 
 class NewsRequest {
@@ -12,6 +14,9 @@ class NewsRequest {
   final DateTime createdAt;
   final DateTime? completedAt;
   final int newItemCount;
+  final double costUsd;
+  final bool isDailyUpdate;
+  final List<CategoryResult> categoryResults;
 
   const NewsRequest({
     required this.id,
@@ -25,6 +30,9 @@ class NewsRequest {
     required this.createdAt,
     this.completedAt,
     this.newItemCount = 0,
+    this.costUsd = 0.0,
+    this.isDailyUpdate = false,
+    this.categoryResults = const [],
   });
 
   factory NewsRequest.fromJson(Map<String, dynamic> json) {
@@ -44,6 +52,12 @@ class NewsRequest {
           ? DateTime.parse(json['completedAt'] as String)
           : null,
       newItemCount: json['newItemCount'] as int? ?? 0,
+      costUsd: (json['costUsd'] as num?)?.toDouble() ?? 0.0,
+      isDailyUpdate: json['isDailyUpdate'] as bool? ?? false,
+      categoryResults: (json['categoryResults'] as List<dynamic>?)
+              ?.map((e) => CategoryResult.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
     );
   }
 
@@ -61,6 +75,8 @@ class NewsRequest {
     DateTime? completedAt,
     int? newItemCount,
     bool clearCompletedAt = false,
+    double? costUsd,
+    List<CategoryResult>? categoryResults,
   }) {
     return NewsRequest(
       id: id,
@@ -74,6 +90,9 @@ class NewsRequest {
       createdAt: createdAt,
       completedAt: clearCompletedAt ? null : (completedAt ?? this.completedAt),
       newItemCount: newItemCount ?? this.newItemCount,
+      costUsd: costUsd ?? this.costUsd,
+      isDailyUpdate: isDailyUpdate,
+      categoryResults: categoryResults ?? this.categoryResults,
     );
   }
 }

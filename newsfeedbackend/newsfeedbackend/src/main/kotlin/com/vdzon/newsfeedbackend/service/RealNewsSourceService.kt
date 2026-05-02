@@ -1,5 +1,6 @@
 package com.vdzon.newsfeedbackend.service
 
+import com.vdzon.newsfeedbackend.model.CategoryResult
 import com.vdzon.newsfeedbackend.model.CategorySettings
 import com.vdzon.newsfeedbackend.model.NewsItem
 import org.slf4j.LoggerFactory
@@ -7,34 +8,42 @@ import org.springframework.stereotype.Service
 import java.time.Instant
 import java.util.UUID
 
+data class DailyFetchResult(
+    val items: List<NewsItem>,
+    val categoryResults: List<CategoryResult>,
+    val totalCostUsd: Double
+)
+
 @Service
 class RealNewsSourceService(
-    private val rssFeedService: RssFeedService,
     private val anthropicService: AnthropicService
 ) {
     private val log = LoggerFactory.getLogger(RealNewsSourceService::class.java)
 
-    fun fetchDailyNews(categories: List<CategorySettings>): List<NewsItem> {
+    fun fetchDailyNews(categories: List<CategorySettings>): DailyFetchResult {
         val now = Instant.now().toString()
-        return categories
-            .filter { it.enabled }
-            .flatMap { cat ->
-                log.info("RSS ophalen voor categorie: {}", cat.name)
-                val articles = rssFeedService.fetchForCategory(cat.id)
-                if (articles.isEmpty()) {
-                    log.warn("Geen RSS artikelen gevonden voor: {}", cat.name)
-                    return@flatMap emptyList()
-                }
-                log.info("{} RSS artikelen gevonden voor {}, Claude samenvatting...", articles.size, cat.name)
-                val summarized = anthropicService.summarizeForCategory(
-                    articles = articles,
-                    category = cat.id,
+        val allItems = mutableListOf<NewsItem>()
+        val categoryResults = mutableListOf<CategoryResult>()
+        var totalCost = 0.0
+
+        categories.filter { it.enabled }.forEach { cat ->
+            log.info("Web search voor categorie: {}", cat.name)
+            val result = anthropicService.searchAndSummarizeForCategory(cat, count = 5)
+            val items = result.articles.map { it.toNewsItem(cat.id, now) }
+            allItems.addAll(items)
+            totalCost += result.costUsd
+            categoryResults.add(
+                CategoryResult(
+                    categoryId = cat.id,
                     categoryName = cat.name,
-                    count = 5,
-                    extraInstructions = cat.extraInstructions
+                    articleCount = items.size,
+                    costUsd = result.costUsd
                 )
-                summarized.map { it.toNewsItem(cat.id, now) }
-            }
+            )
+            log.info("Categorie '{}': {} artikelen, kosten \${}", cat.name, items.size, "%.4f".format(result.costUsd))
+        }
+
+        return DailyFetchResult(allItems, categoryResults, totalCost)
     }
 
     fun fetchArticlesForSubject(
@@ -42,24 +51,18 @@ class RealNewsSourceService(
         preferredCount: Int,
         extraInstructions: String = "",
         categories: List<CategorySettings>
-    ): List<NewsItem> {
+    ): Pair<List<NewsItem>, Double> {
         val now = Instant.now().toString()
-        log.info("RSS ophalen voor onderwerp: {}", subject)
-        val articles = rssFeedService.fetchAll()
-        if (articles.isEmpty()) {
-            log.warn("Geen RSS artikelen beschikbaar voor onderwerp: {}", subject)
-            return emptyList()
-        }
-        log.info("{} RSS artikelen beschikbaar, Claude zoekt relevante voor: {}", articles.size, subject)
-        val summarized = anthropicService.summarizeForSubject(
-            articles = articles,
+        log.info("Web search voor onderwerp: {}", subject)
+        val result = anthropicService.searchAndSummarizeForSubject(
             subject = subject,
             count = preferredCount,
             extraInstructions = extraInstructions
         )
-        // Categorie bepalen op basis van welke categorie de meeste overlap heeft
         val categoryId = detectCategory(subject, categories)
-        return summarized.map { it.toNewsItem(categoryId, now) }
+        val items = result.articles.map { it.toNewsItem(categoryId, now) }
+        log.info("Onderwerp '{}': {} artikelen, kosten \${}", subject, items.size, "%.4f".format(result.costUsd))
+        return Pair(items, result.costUsd)
     }
 
     private fun detectCategory(subject: String, categories: List<CategorySettings>): String {

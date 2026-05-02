@@ -48,7 +48,11 @@ class QueueScreen extends ConsumerWidget {
                       padding: const EdgeInsets.only(bottom: 88),
                       itemCount: requests.length,
                       itemBuilder: (context, index) {
-                        return _RequestTile(request: requests[index]);
+                        final request = requests[index];
+                        if (request.isDailyUpdate) {
+                          return _DailyUpdateTile(request: request);
+                        }
+                        return _RequestTile(request: request);
                       },
                     ),
             ),
@@ -77,6 +81,229 @@ class QueueScreen extends ConsumerWidget {
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Daily Update Tile (pinned, cannot be deleted)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _DailyUpdateTile extends ConsumerWidget {
+  final NewsRequest request;
+
+  const _DailyUpdateTile({required this.request});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => _showDetail(context, ref),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _StatusIcon(status: request.status),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              request.subject,
+                              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                            ),
+                            const SizedBox(width: 6),
+                            Icon(Icons.push_pin, size: 12, color: Colors.grey[500]),
+                          ],
+                        ),
+                        if (request.status == RequestStatus.done && request.costUsd > 0) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            'Kosten: \$${request.costUsd.toStringAsFixed(4)}',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(color: Colors.grey[600]),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  _StatusChip(status: request.status),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.schedule, size: 14, color: Colors.grey[500]),
+                  const SizedBox(width: 4),
+                  Text(
+                    _formatTime(request.createdAt),
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: Colors.grey[500]),
+                  ),
+                  const Spacer(),
+                  if (request.status == RequestStatus.done)
+                    Text(
+                      '${request.newItemCount} artikel${request.newItemCount != 1 ? 'en' : ''} toegevoegd',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.primary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                    ),
+                  if (request.status == RequestStatus.processing)
+                    Row(
+                      children: [
+                        SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.orange[600],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Bezig...',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Colors.orange[700],
+                              ),
+                        ),
+                      ],
+                    ),
+                  if (request.status == RequestStatus.done ||
+                      request.status == RequestStatus.failed) ...[
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () => ref.read(requestProvider.notifier).rerunRequest(request),
+                      child: Row(
+                        children: [
+                          Icon(Icons.replay, size: 14, color: Colors.grey[500]),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Opnieuw',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: Colors.grey[500],
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showDetail(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Row(
+          children: [
+            Text(request.subject),
+            const SizedBox(width: 8),
+            Icon(Icons.push_pin, size: 16, color: Colors.grey[500]),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                const Icon(Icons.schedule, size: 14, color: Colors.grey),
+                const SizedBox(width: 4),
+                Text(_formatTime(request.createdAt),
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+              ]),
+              if (request.status == RequestStatus.done) ...[
+                const SizedBox(height: 8),
+                Row(children: [
+                  const Icon(Icons.article, size: 14, color: Colors.green),
+                  const SizedBox(width: 4),
+                  Text('${request.newItemCount} artikelen toegevoegd',
+                      style: const TextStyle(color: Colors.green, fontSize: 12)),
+                ]),
+                const SizedBox(height: 8),
+                Row(children: [
+                  const Icon(Icons.euro, size: 14, color: Colors.grey),
+                  const SizedBox(width: 4),
+                  Text('Totale kosten: \$${request.costUsd.toStringAsFixed(4)}',
+                      style: TextStyle(color: Colors.grey[700], fontSize: 12, fontWeight: FontWeight.w600)),
+                ]),
+                if (request.categoryResults.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text('Uitsplitsing per categorie:',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12, fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 6),
+                  ...request.categoryResults.map((cat) => Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Row(
+                          children: [
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(cat.categoryName,
+                                  style: const TextStyle(fontSize: 12)),
+                            ),
+                            Text('${cat.articleCount} art.',
+                                style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+                            const SizedBox(width: 8),
+                            Text('\$${cat.costUsd.toStringAsFixed(4)}',
+                                style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                          ],
+                        ),
+                      )),
+                ],
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Sluiten'),
+          ),
+          if (request.status == RequestStatus.done || request.status == RequestStatus.failed)
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.pop(context);
+                ref.read(requestProvider.notifier).rerunRequest(request);
+              },
+              icon: const Icon(Icons.replay, size: 16),
+              label: const Text('Opnieuw'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _formatTime(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 60) return '${diff.inMinutes} min geleden';
+    if (diff.inHours < 24) return '${diff.inHours} uur geleden';
+    return '${diff.inDays} dag${diff.inDays != 1 ? 'en' : ''} geleden';
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Regular Request Tile (dismissible)
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _RequestTile extends ConsumerWidget {
   final NewsRequest request;
@@ -266,6 +493,15 @@ class _RequestTile extends ConsumerWidget {
                 Text('${request.newItemCount} artikelen toegevoegd',
                     style: const TextStyle(color: Colors.green, fontSize: 12)),
               ]),
+              if (request.costUsd > 0) ...[
+                const SizedBox(height: 4),
+                Row(children: [
+                  const Icon(Icons.euro, size: 14, color: Colors.grey),
+                  const SizedBox(width: 4),
+                  Text('Kosten: \$${request.costUsd.toStringAsFixed(4)}',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                ]),
+              ],
             ],
           ],
         ),
@@ -295,6 +531,10 @@ class _RequestTile extends ConsumerWidget {
     return '${diff.inDays} dag${diff.inDays != 1 ? 'en' : ''} geleden';
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared widgets
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _StatusIcon extends StatelessWidget {
   final RequestStatus status;
@@ -339,6 +579,10 @@ class _StatusChip extends StatelessWidget {
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Add Request Dialog
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _AddRequestDialog extends StatefulWidget {
   final NewsRequest? prefill;

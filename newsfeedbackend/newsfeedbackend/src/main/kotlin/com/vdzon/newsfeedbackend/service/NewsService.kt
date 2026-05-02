@@ -2,7 +2,6 @@ package com.vdzon.newsfeedbackend.service
 
 import com.vdzon.newsfeedbackend.model.NewsItem
 import org.slf4j.LoggerFactory
-import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
 
 @Service
@@ -50,22 +49,16 @@ class NewsService(
         log.info("Nieuws verversen voor gebruiker: {}", username)
         val categories = settingsService.getSettings(username)
         try {
-            val items = realNewsSourceService.fetchDailyNews(categories)
-            if (items.isNotEmpty()) {
-                storageService.saveNews(username, items)
-                log.info("{} nieuwsartikelen opgeslagen voor {}", items.size, username)
+            val fetchResult = realNewsSourceService.fetchDailyNews(categories)
+            if (fetchResult.items.isNotEmpty()) {
+                storageService.saveNews(username, fetchResult.items)
+                log.info("{} nieuwsartikelen opgeslagen voor {}", fetchResult.items.size, username)
             } else {
-                log.warn("Geen artikelen via RSS/AI, gebruik mock voor {}", username)
+                log.warn("Geen artikelen via web search, gebruik mock voor {}", username)
                 storageService.saveNews(username, mockNewsService.fetchDailyNews())
             }
         } catch (e: Exception) {
             log.error("Nieuws verversen mislukt voor {}: {}", username, e.message)
         }
-    }
-
-    @Scheduled(cron = "0 0 6 * * *")
-    fun scheduledRefresh() {
-        log.info("Dagelijkse nieuws refresh gestart")
-        storageService.getAllUsernames().forEach { refresh(it) }
     }
 }

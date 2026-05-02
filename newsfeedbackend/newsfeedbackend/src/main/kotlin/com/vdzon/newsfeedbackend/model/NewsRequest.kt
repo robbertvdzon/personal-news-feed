@@ -11,5 +11,8 @@ data class NewsRequest(
     val status: RequestStatus = RequestStatus.PENDING,
     val createdAt: String,
     val completedAt: String? = null,
-    val newItemCount: Int = 0
+    val newItemCount: Int = 0,
+    val costUsd: Double = 0.0,
+    val isDailyUpdate: Boolean = false,
+    val categoryResults: List<CategoryResult> = emptyList()
 )
