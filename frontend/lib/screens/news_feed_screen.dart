@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/news_provider.dart';
 import '../providers/settings_provider.dart';
+import '../widgets/app_logo.dart';
 import '../widgets/news_card.dart';
 
 class NewsFeedScreen extends ConsumerWidget {
@@ -15,7 +16,14 @@ class NewsFeedScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Nieuws'),
+        title: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AppLogo(size: 26, showText: false),
+            SizedBox(width: 10),
+            Text('Nieuws'),
+          ],
+        ),
         centerTitle: false,
         actions: [
           TextButton.icon(
