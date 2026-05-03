@@ -29,6 +29,11 @@ class PodcastScreen extends ConsumerWidget {
             tooltip: 'Vernieuwen',
             onPressed: () => ref.read(podcastProvider.notifier).refresh(),
           ),
+          IconButton(
+            icon: const Icon(Icons.add),
+            tooltip: 'Nieuwe podcast',
+            onPressed: () => _showCreateDialog(context, ref),
+          ),
         ],
       ),
       body: Column(
@@ -54,11 +59,6 @@ class PodcastScreen extends ConsumerWidget {
           // Globale mini-player (alleen zichtbaar als er iets geladen is)
           if (audioState.podcastId != null) const _MiniPlayer(),
         ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showCreateDialog(context, ref),
-        icon: const Icon(Icons.mic),
-        label: const Text('Nieuwe podcast'),
       ),
     );
   }
