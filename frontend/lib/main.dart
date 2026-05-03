@@ -4,6 +4,7 @@ import 'providers/auth_provider.dart';
 import 'providers/request_provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/news_feed_screen.dart';
+import 'screens/podcast_screen.dart';
 import 'screens/queue_screen.dart';
 import 'screens/settings_screen.dart';
 
@@ -65,6 +66,7 @@ class _MainShellState extends ConsumerState<_MainShell> {
   static const _screens = [
     NewsFeedScreen(),
     QueueScreen(),
+    PodcastScreen(),
     SettingsScreen(),
   ];
 
@@ -99,6 +101,11 @@ class _MainShellState extends ConsumerState<_MainShell> {
               child: const Icon(Icons.inbox),
             ),
             label: 'Verzoeken',
+          ),
+          const NavigationDestination(
+            icon: Icon(Icons.podcasts_outlined),
+            selectedIcon: Icon(Icons.podcasts),
+            label: 'Podcast',
           ),
           const NavigationDestination(
             icon: Icon(Icons.settings_outlined),

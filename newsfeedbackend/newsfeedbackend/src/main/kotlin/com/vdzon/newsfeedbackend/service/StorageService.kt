@@ -3,6 +3,7 @@ package com.vdzon.newsfeedbackend.service
 import com.vdzon.newsfeedbackend.model.CategorySettings
 import com.vdzon.newsfeedbackend.model.NewsItem
 import com.vdzon.newsfeedbackend.model.NewsRequest
+import com.vdzon.newsfeedbackend.model.Podcast
 import com.vdzon.newsfeedbackend.model.User
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
@@ -34,6 +35,16 @@ class StorageService(
     // ── per-user settings ──────────────────────────────────────────────────────
     fun loadSettings(username: String): List<CategorySettings>? = readFile(userFile(username, "settings.json"))
     fun saveSettings(username: String, settings: List<CategorySettings>) = objectMapper.writeValue(userFile(username, "settings.json"), settings)
+
+    // ── per-user podcasts ──────────────────────────────────────────────────────
+    fun loadPodcasts(username: String): List<Podcast> = readFile(userFile(username, "podcasts.json")) ?: emptyList()
+    fun savePodcasts(username: String, podcasts: List<Podcast>) = objectMapper.writeValue(userFile(username, "podcasts.json"), podcasts)
+
+    fun audioDirForUser(username: String): File {
+        val dir = File(dataDir, "users/$username/audio")
+        dir.mkdirs()
+        return dir
+    }
 
     // ── helpers ────────────────────────────────────────────────────────────────
     private fun userFile(username: String, name: String): File {

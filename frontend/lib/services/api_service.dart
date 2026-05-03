@@ -4,6 +4,7 @@ import '../config/app_config.dart';
 import '../models/category.dart';
 import '../models/news_item.dart';
 import '../models/news_request.dart';
+import '../models/podcast.dart';
 
 class ApiService {
   static final _client = http.Client();
@@ -137,6 +138,49 @@ class ApiService {
       headers: _headers,
     );
   }
+
+  // ── Podcasts ─────────────────────────────────────────────────────────────────
+
+  static Future<List<Podcast>> fetchPodcasts() async {
+    final response = await _client.get(
+      Uri.parse('${AppConfig.apiBaseUrl}/api/podcasts'),
+      headers: _headers,
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Fout bij ophalen podcasts: ${response.statusCode}');
+    }
+    final list = jsonDecode(response.body) as List<dynamic>;
+    return list.map((e) => Podcast.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  static Future<Podcast> createPodcast({
+    required int periodDays,
+    required int durationMinutes,
+  }) async {
+    final response = await _client.post(
+      Uri.parse('${AppConfig.apiBaseUrl}/api/podcasts'),
+      headers: _headers,
+      body: jsonEncode({'periodDays': periodDays, 'durationMinutes': durationMinutes}),
+    );
+    if (response.statusCode != 201) {
+      throw Exception('Fout bij aanmaken podcast: ${response.statusCode}');
+    }
+    return Podcast.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
+  static Future<void> deletePodcast(String id) async {
+    await _client.delete(
+      Uri.parse('${AppConfig.apiBaseUrl}/api/podcasts/$id'),
+      headers: _headers,
+    );
+  }
+
+  static String podcastAudioUrl(String id) =>
+      '${AppConfig.apiBaseUrl}/api/podcasts/$id/audio';
+
+  static String? get currentToken => _token;
+
+  // ─────────────────────────────────────────────────────────────────────────────
 
   static Future<void> setFeedback(String id, bool? liked) async {
     await _client.put(

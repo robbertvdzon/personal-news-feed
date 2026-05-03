@@ -204,6 +204,56 @@ class AnthropicService(
         return query.ifBlank { "$categoryName news" }
     }
 
+    // Schrijft een Nederlandstalig podcast-interview-script
+    fun generatePodcastScript(
+        articles: List<NewsItem>,
+        periodDays: Int,
+        durationMinutes: Int,
+        previousTopics: List<String> = emptyList()
+    ): Pair<String, Double> {
+        val targetWords = durationMinutes * 140
+
+        val previousTopicsPart = if (previousTopics.isNotEmpty())
+            "\n\nAl eerder besproken onderwerpen (vermijd overlap):\n" +
+                    previousTopics.take(20).joinToString("\n") { "- $it" }
+        else ""
+
+        val articleList = articles.take(30).mapIndexed { i, a ->
+            "${i + 1}. [${a.category}] ${a.title}\n   ${a.summary.take(300)}"
+        }.joinToString("\n\n")
+
+        val prompt = """
+            Schrijf een Nederlandstalig podcast-interview van circa $durationMinutes minuten (~$targetWords woorden)
+            tussen een INTERVIEWER en een GAST (senior software developer).
+
+            Onderwerp: de laatste $periodDays dag(en) in software-ontwikkeling, AI en cloud.
+
+            Gebaseerd op deze artikelen:
+            $articleList$previousTopicsPart
+
+            Richtlijnen:
+            - Schrijf als een natuurlijk, vloeiend gesprek — geen stijve Q&A
+            - Gebruik korte, duidelijke zinnen geschikt voor audio
+            - INTERVIEWER introduceert onderwerpen en stelt vragen
+            - GAST geeft diepgaande antwoorden vanuit een developer-perspectief
+            - Vermijd moeilijk uit te spreken afkortingen; spreek ze uit (bv. "A I" niet "AI")
+            - Verdeel de spreektijd ongeveer gelijk
+            - Begin met een korte intro van de INTERVIEWER
+            - Eindig met een samenvatting en afsluiting door de INTERVIEWER
+
+            VERPLICHT FORMAAT — elke spreekbeurt op exact één regel:
+            INTERVIEWER: [tekst]
+            GAST: [tekst]
+
+            Geen andere tekst, geen kopteksten, geen nummers, geen uitleg.
+        """.trimIndent()
+
+        val (text, cost) = callWithRetry(prompt, summaryModel, maxTokens = 6000)
+        val wordCount = text.split("\\s+".toRegex()).size
+        log.info("Podcast script gegenereerd: {} woorden, kosten \${}", wordCount, "%.4f".format(cost))
+        return Pair(text.trim(), cost)
+    }
+
     // Genereert een dagelijks redactioneel overzicht van alle gevonden artikelen
     fun generateDailySummary(articles: List<NewsItem>, categories: List<String>): Pair<NewsItem, Double> {
         if (articles.isEmpty()) {
@@ -327,10 +377,10 @@ class AnthropicService(
 
     // ── Interne HTTP call ──────────────────────────────────────────────────────
 
-    private fun callWithRetry(prompt: String, model: String): Pair<String, Double> {
+    private fun callWithRetry(prompt: String, model: String, maxTokens: Int = 2000): Pair<String, Double> {
         val body = mapOf(
             "model" to model,
-            "max_tokens" to 2000,
+            "max_tokens" to maxTokens,
             "messages" to listOf(mapOf("role" to "user", "content" to prompt))
         )
         val bodyJson = objectMapper.writeValueAsString(body)
