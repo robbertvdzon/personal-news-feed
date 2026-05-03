@@ -46,7 +46,7 @@ class SettingsNotifier extends AsyncNotifier<List<Category>> {
     if (cats.any((c) => c.id == id)) return Future.value();
     return _mutate((current) => [
           ...current,
-          Category(id: id, name: name, enabled: true),
+          Category(id: id, name: name, enabled: true, preferredCount: 3, maxCount: 5),
         ]);
   }
 

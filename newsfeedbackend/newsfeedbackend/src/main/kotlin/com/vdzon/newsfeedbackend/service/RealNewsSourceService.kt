@@ -14,11 +14,11 @@ data class DailyFetchResult(
     val totalCostUsd: Double
 )
 
-// Categorie-IDs die nooit actief gezocht worden (catch-all)
 private val SYSTEM_CATEGORY_IDS = setOf("overig")
 
 @Service
 class RealNewsSourceService(
+    private val tavilyService: TavilyService,
     private val anthropicService: AnthropicService
 ) {
     private val log = LoggerFactory.getLogger(RealNewsSourceService::class.java)
@@ -34,25 +34,27 @@ class RealNewsSourceService(
         categories
             .filter { it.enabled && !it.isSystem && it.id !in SYSTEM_CATEGORY_IDS }
             .forEach { cat ->
-                log.info("Fase 1: artikelen zoeken voor categorie '{}'", cat.name)
-                val (refs, searchCost) = anthropicService.findArticlesForCategory(cat, count = cat.preferredCount)
-                totalCost += searchCost
+                log.info("Zoekquery genereren voor categorie '{}'", cat.name)
+                val query = anthropicService.generateSearchQuery(cat.name, cat.extraInstructions)
+                val articles = tavilyService.search(
+                    query = query,
+                    maxResults = cat.preferredCount
+                )
 
-                if (refs.isEmpty()) {
+                if (articles.isEmpty()) {
                     log.warn("Geen artikelen gevonden voor categorie '{}'", cat.name)
-                    categoryResults.add(CategoryResult(cat.id, cat.name, 0, searchCost))
+                    categoryResults.add(CategoryResult(cat.id, cat.name, 0, 0.0))
                     return@forEach
                 }
 
-                // Fase 2: sequentieel — voorkomt rate limit problemen
                 val now = Instant.now().toString()
                 var summaryCost = 0.0
                 val items = mutableListOf<NewsItem>()
 
-                refs.forEach { ref ->
-                    log.info("Fase 2: samenvatting voor '{}' ({})", ref.title.take(40), cat.name)
-                    val (article, cost) = anthropicService.summarizeArticle(ref, cat.name)
-                    val item = article.toNewsItem(cat.id, now)
+                articles.forEach { article ->
+                    log.info("Samenvatting voor '{}' ({})", article.title.take(40), cat.name)
+                    val (summarized, cost) = anthropicService.summarizeArticle(article, cat.name)
+                    val item = summarized.toNewsItem(cat.id, now)
                     onArticle(item)
                     items.add(item)
                     summaryCost += cost
@@ -60,8 +62,8 @@ class RealNewsSourceService(
 
                 allItems.addAll(items)
                 totalCost += summaryCost
-                categoryResults.add(CategoryResult(cat.id, cat.name, items.size, searchCost + summaryCost))
-                log.info("Categorie '{}': {} artikelen, kosten \${}", cat.name, items.size, "%.4f".format(searchCost + summaryCost))
+                categoryResults.add(CategoryResult(cat.id, cat.name, items.size, summaryCost))
+                log.info("Categorie '{}': {} artikelen, kosten \${}", cat.name, items.size, "%.5f".format(summaryCost))
             }
 
         return DailyFetchResult(allItems, categoryResults, totalCost)
@@ -74,31 +76,30 @@ class RealNewsSourceService(
         categories: List<CategorySettings>,
         onArticle: (NewsItem) -> Unit = {}
     ): Pair<List<NewsItem>, Double> {
-        log.info("Fase 1: artikelen zoeken voor onderwerp '{}'", subject)
-        val (refs, searchCost) = anthropicService.findArticles(subject, preferredCount, extraInstructions)
+        log.info("Zoekquery genereren voor onderwerp '{}'", subject)
+        val query = anthropicService.generateSearchQuery(subject, extraInstructions)
+        val articles = tavilyService.search(query = query, maxResults = preferredCount)
 
-        if (refs.isEmpty()) {
+        if (articles.isEmpty()) {
             log.warn("Geen artikelen gevonden voor onderwerp '{}'", subject)
-            return Pair(emptyList(), searchCost)
+            return Pair(emptyList(), 0.0)
         }
 
-        // Fase 2: sequentieel
         val now = Instant.now().toString()
         val categoryId = detectCategory(subject, categories)
-        var summaryCost = 0.0
+        var totalCost = 0.0
         val allItems = mutableListOf<NewsItem>()
 
-        refs.forEach { ref ->
-            log.info("Fase 2: samenvatting voor '{}'", ref.title.take(40))
-            val (article, cost) = anthropicService.summarizeArticle(ref, subject)
-            val item = article.toNewsItem(categoryId, now)
+        articles.forEach { article ->
+            log.info("Samenvatting voor '{}'", article.title.take(40))
+            val (summarized, cost) = anthropicService.summarizeArticle(article, subject)
+            val item = summarized.toNewsItem(categoryId, now)
             onArticle(item)
             allItems.add(item)
-            summaryCost += cost
+            totalCost += cost
         }
 
-        val totalCost = searchCost + summaryCost
-        log.info("Onderwerp '{}': {} artikelen, kosten \${}", subject, allItems.size, "%.4f".format(totalCost))
+        log.info("Onderwerp '{}': {} artikelen, kosten \${}", subject, allItems.size, "%.5f".format(totalCost))
         return Pair(allItems, totalCost)
     }
 

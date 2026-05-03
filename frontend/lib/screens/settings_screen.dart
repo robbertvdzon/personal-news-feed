@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/auth_provider.dart';
 import '../providers/settings_provider.dart';
@@ -14,9 +15,7 @@ class SettingsScreen extends ConsumerWidget {
     final auth = ref.watch(authProvider).valueOrNull;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Instellingen'),
-      ),
+      appBar: AppBar(title: const Text('Instellingen')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -37,11 +36,11 @@ class SettingsScreen extends ConsumerWidget {
           _SectionHeader('Categorieën'),
           const SizedBox(height: 4),
           Text(
-            'Kies welke categorieën je wilt zien, pas de naam en aantallen aan.',
+            'Tik op een categorie om hem te bewerken.',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey[500]),
           ),
-          const SizedBox(height: 16),
-          ...visibleCategories.map((cat) => _CategoryCard(category: cat)),
+          const SizedBox(height: 12),
+          ...visibleCategories.map((cat) => _CategoryRow(category: cat)),
           const SizedBox(height: 8),
           _AddCategoryButton(),
         ],
@@ -50,24 +49,251 @@ class SettingsScreen extends ConsumerWidget {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Section header
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _SectionHeader extends StatelessWidget {
   final String title;
   const _SectionHeader(this.title);
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Text(
-        title,
-        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: Colors.grey[700],
-            ),
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Text(
+          title,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[700],
+              ),
+        ),
+      );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Category row — tap to edit
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _CategoryRow extends ConsumerWidget {
+  final Category category;
+  const _CategoryRow({required this.category});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cat = category;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      elevation: 1,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () => showDialog(
+          context: context,
+          builder: (_) => _EditCategoryDialog(category: cat),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  cat.name,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: cat.enabled ? null : Colors.grey[400],
+                      ),
+                ),
+              ),
+              Text(
+                '${cat.preferredCount}–${cat.maxCount} art.',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: Colors.grey[500]),
+              ),
+              const SizedBox(width: 8),
+              Switch(
+                value: cat.enabled,
+                onChanged: (_) =>
+                    ref.read(settingsProvider.notifier).toggleCategory(cat.id),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Edit dialog
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _EditCategoryDialog extends ConsumerStatefulWidget {
+  final Category category;
+  const _EditCategoryDialog({required this.category});
+
+  @override
+  ConsumerState<_EditCategoryDialog> createState() => _EditCategoryDialogState();
+}
+
+class _EditCategoryDialogState extends ConsumerState<_EditCategoryDialog> {
+  late TextEditingController _nameController;
+  late TextEditingController _extraController;
+  late TextEditingController _preferredController;
+  late TextEditingController _maxController;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.category.name);
+    _extraController = TextEditingController(text: widget.category.extraInstructions);
+    _preferredController = TextEditingController(text: '${widget.category.preferredCount}');
+    _maxController = TextEditingController(text: '${widget.category.maxCount}');
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _extraController.dispose();
+    _preferredController.dispose();
+    _maxController.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final notifier = ref.read(settingsProvider.notifier);
+    final id = widget.category.id;
+    final newName = _nameController.text.trim();
+    if (newName.isNotEmpty && newName != widget.category.name) {
+      notifier.updateName(id, newName);
+    }
+    notifier.updateExtraInstructions(id, _extraController.text.trim());
+    final preferred = int.tryParse(_preferredController.text) ?? widget.category.preferredCount;
+    final max = int.tryParse(_maxController.text) ?? widget.category.maxCount;
+    notifier.updateCounts(id, preferred, max.clamp(preferred, 99));
+    Navigator.of(context).pop();
+  }
+
+  void _delete() {
+    Navigator.of(context).pop();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Categorie verwijderen'),
+        content: Text('Wil je "${widget.category.name}" verwijderen?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Annuleren'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () {
+              ref.read(settingsProvider.notifier).removeCategory(widget.category.id);
+              Navigator.of(context).pop();
+            },
+            child: const Text('Verwijderen'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Categorie bewerken'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Naam
+            TextField(
+              controller: _nameController,
+              decoration: const InputDecoration(
+                labelText: 'Naam',
+                border: OutlineInputBorder(),
+              ),
+              autofocus: true,
+            ),
+            const SizedBox(height: 16),
+
+            // Extra instructies
+            TextField(
+              controller: _extraController,
+              decoration: const InputDecoration(
+                labelText: 'Extra instructies (optioneel)',
+                hintText: 'Bijv. focus op praktische tutorials',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 6,
+              minLines: 4,
+            ),
+            const SizedBox(height: 16),
+
+            // Gewenst en maximaal aantal
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _preferredController,
+                    decoration: const InputDecoration(
+                      labelText: 'Gewenst aantal',
+                      hintText: '3',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: _maxController,
+                    decoration: const InputDecoration(
+                      labelText: 'Maximum',
+                      hintText: '5',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        Row(
+          children: [
+            TextButton(
+              onPressed: _delete,
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Verwijderen'),
+            ),
+            const Spacer(),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Annuleren'),
+            ),
+            const SizedBox(width: 8),
+            FilledButton(
+              onPressed: _save,
+              child: const Text('Opslaan'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Add category button
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _AddCategoryButton extends ConsumerWidget {
   @override
@@ -114,291 +340,6 @@ class _AddCategoryButton extends ConsumerWidget {
             child: const Text('Toevoegen'),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _CategoryCard extends ConsumerStatefulWidget {
-  final Category category;
-  const _CategoryCard({required this.category});
-
-  @override
-  ConsumerState<_CategoryCard> createState() => _CategoryCardState();
-}
-
-class _CategoryCardState extends ConsumerState<_CategoryCard> {
-  late TextEditingController _nameController;
-  late TextEditingController _extraController;
-  bool _editingExtra = false;
-  bool _editingName = false;
-  late int _preferredCount;
-  late int _maxCount;
-
-  @override
-  void initState() {
-    super.initState();
-    _nameController = TextEditingController(text: widget.category.name);
-    _extraController = TextEditingController(text: widget.category.extraInstructions);
-    _preferredCount = widget.category.preferredCount;
-    _maxCount = widget.category.maxCount;
-  }
-
-  @override
-  void didUpdateWidget(_CategoryCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (!_editingName) _nameController.text = widget.category.name;
-    if (!_editingExtra) _extraController.text = widget.category.extraInstructions;
-    if (!_editingExtra) {
-      _preferredCount = widget.category.preferredCount;
-      _maxCount = widget.category.maxCount;
-    }
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _extraController.dispose();
-    super.dispose();
-  }
-
-  void _confirmDelete(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Categorie verwijderen'),
-        content: Text('Wil je "${widget.category.name}" verwijderen?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Annuleren'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () {
-              ref.read(settingsProvider.notifier).removeCategory(widget.category.id);
-              Navigator.of(context).pop();
-            },
-            child: const Text('Verwijderen'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _saveName() {
-    final newName = _nameController.text.trim();
-    if (newName.isNotEmpty && newName != widget.category.name) {
-      ref.read(settingsProvider.notifier).updateName(widget.category.id, newName);
-    }
-    setState(() => _editingName = false);
-  }
-
-  void _saveExtra() {
-    ref.read(settingsProvider.notifier).updateExtraInstructions(
-          widget.category.id, _extraController.text);
-    ref.read(settingsProvider.notifier).updateCounts(
-          widget.category.id, _preferredCount, _maxCount);
-    setState(() => _editingExtra = false);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final cat = widget.category;
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      elevation: 1,
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Titel rij ──────────────────────────────────────────────────
-            Row(
-              children: [
-                Expanded(
-                  child: _editingName
-                      ? TextField(
-                          controller: _nameController,
-                          autofocus: true,
-                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
-                          decoration: const InputDecoration(
-                            isDense: true,
-                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                            border: OutlineInputBorder(),
-                          ),
-                          onSubmitted: (_) => _saveName(),
-                        )
-                      : GestureDetector(
-                          onTap: () => setState(() => _editingName = true),
-                          child: Row(
-                            children: [
-                              Text(
-                                cat.name,
-                                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                              ),
-                              const SizedBox(width: 4),
-                              Icon(Icons.edit, size: 13, color: Colors.grey[400]),
-                            ],
-                          ),
-                        ),
-                ),
-                if (_editingName) ...[
-                  IconButton(
-                    icon: const Icon(Icons.check, size: 18),
-                    color: Colors.green,
-                    onPressed: _saveName,
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close, size: 18),
-                    onPressed: () {
-                      _nameController.text = cat.name;
-                      setState(() => _editingName = false);
-                    },
-                  ),
-                ] else ...[
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline, size: 18),
-                    color: Colors.red[400],
-                    tooltip: 'Verwijder categorie',
-                    onPressed: () => _confirmDelete(context),
-                  ),
-                  Switch(
-                    value: cat.enabled,
-                    onChanged: (_) =>
-                        ref.read(settingsProvider.notifier).toggleCategory(cat.id),
-                  ),
-                ],
-              ],
-            ),
-
-            if (cat.enabled) ...[
-              const SizedBox(height: 8),
-
-              // ── Extra instructies + counts ─────────────────────────────
-              if (_editingExtra)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    // Aantallen sliders
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Minimaal: $_preferredCount',
-                                  style: Theme.of(context).textTheme.bodySmall),
-                              Slider(
-                                value: _preferredCount.toDouble(),
-                                min: 1,
-                                max: 10,
-                                divisions: 9,
-                                label: '$_preferredCount',
-                                onChanged: (v) => setState(() {
-                                  _preferredCount = v.round();
-                                  if (_maxCount < _preferredCount) _maxCount = _preferredCount;
-                                }),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Maximaal: $_maxCount',
-                                  style: Theme.of(context).textTheme.bodySmall),
-                              Slider(
-                                value: _maxCount.toDouble(),
-                                min: 1,
-                                max: 20,
-                                divisions: 19,
-                                label: '$_maxCount',
-                                onChanged: (v) => setState(() {
-                                  _maxCount = v.round();
-                                  if (_preferredCount > _maxCount) _preferredCount = _maxCount;
-                                }),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    // Extra instructies
-                    TextField(
-                      controller: _extraController,
-                      decoration: InputDecoration(
-                        hintText: 'Extra instructies (optioneel)',
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8)),
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 10),
-                        isDense: true,
-                      ),
-                      maxLines: 3,
-                      minLines: 2,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    TextButton(
-                      onPressed: _saveExtra,
-                      child: const Text('Opslaan'),
-                    ),
-                  ],
-                )
-              else
-                InkWell(
-                  onTap: () => setState(() => _editingExtra = true),
-                  borderRadius: BorderRadius.circular(8),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[50],
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.grey[200]!),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            cat.extraInstructions.isEmpty
-                                ? 'Tik om te bewerken...'
-                                : cat.extraInstructions,
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  color: cat.extraInstructions.isEmpty
-                                      ? Colors.grey[400]
-                                      : Colors.grey[700],
-                                  fontStyle: cat.extraInstructions.isEmpty
-                                      ? FontStyle.italic
-                                      : FontStyle.normal,
-                                ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          '${cat.preferredCount}–${cat.maxCount} art.',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(color: Colors.grey[500]),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-            ],
-          ],
-        ),
       ),
     );
   }

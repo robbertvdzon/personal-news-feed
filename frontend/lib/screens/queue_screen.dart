@@ -169,14 +169,20 @@ class _DailyUpdateTile extends ConsumerWidget {
                           const SizedBox(width: 6),
                           Text(
                             _formatCents(request.costUsd),
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey[500]),
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: Colors.grey[700],
+                                  fontWeight: FontWeight.w500,
+                                ),
                           ),
                         ],
                         if (request.durationSeconds > 0) ...[
                           const SizedBox(width: 6),
                           Text(
                             _formatDuration(request.durationSeconds),
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey[500]),
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: Colors.grey[700],
+                                  fontWeight: FontWeight.w500,
+                                ),
                           ),
                         ],
                       ],
@@ -414,14 +420,20 @@ class _RequestTile extends ConsumerWidget {
                           const SizedBox(width: 6),
                           Text(
                             _formatCents(request.costUsd),
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey[500]),
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: Colors.grey[700],
+                                  fontWeight: FontWeight.w500,
+                                ),
                           ),
                         ],
                         if (request.durationSeconds > 0) ...[
                           const SizedBox(width: 6),
                           Text(
                             _formatDuration(request.durationSeconds),
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey[500]),
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: Colors.grey[700],
+                                  fontWeight: FontWeight.w500,
+                                ),
                           ),
                         ],
                       ],
