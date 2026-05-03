@@ -39,24 +39,38 @@ class RealNewsSourceService(
         val categoryResults = mutableListOf<CategoryResult>()
         var totalCost = 0.0
 
-        categories
-            .filter { it.enabled && !it.isSystem && it.id !in SYSTEM_CATEGORY_IDS }
-            .forEach { cat ->
-                val (items, cost) = fetchAndSummarize(
-                    subject = cat.name,
-                    extraInstructions = cat.extraInstructions,
-                    preferredCount = cat.preferredCount,
-                    maxCount = cat.maxCount,
-                    categoryId = cat.id,
-                    websites = cat.websites,
-                    feedback = feedback,
-                    onArticle = onArticle
-                )
-                allItems.addAll(items)
-                totalCost += cost
-                categoryResults.add(CategoryResult(cat.id, cat.name, items.size, cost))
-                log.info("Categorie '{}': {} artikelen, kosten \${}", cat.name, items.size, "%.5f".format(cost))
+        val enabledCategories = categories.filter { it.enabled && !it.isSystem && it.id !in SYSTEM_CATEGORY_IDS }
+
+        enabledCategories.forEach { cat ->
+            val (items, cost) = fetchAndSummarize(
+                subject = cat.name,
+                extraInstructions = cat.extraInstructions,
+                preferredCount = cat.preferredCount,
+                maxCount = cat.maxCount,
+                categoryId = cat.id,
+                websites = cat.websites,
+                feedback = feedback,
+                onArticle = onArticle
+            )
+            allItems.addAll(items)
+            totalCost += cost
+            categoryResults.add(CategoryResult(cat.id, cat.name, items.size, cost))
+            log.info("Categorie '{}': {} artikelen, kosten \${}", cat.name, items.size, "%.5f".format(cost))
+        }
+
+        // Dagelijks overzicht: redactionele briefing van alle gevonden artikelen
+        if (allItems.isNotEmpty()) {
+            val categoryNames = enabledCategories.map { it.name }
+            try {
+                log.info("Dagelijks overzicht genereren op basis van {} artikelen", allItems.size)
+                val (summaryItem, summaryCost) = anthropicService.generateDailySummary(allItems, categoryNames)
+                allItems.add(0, summaryItem)
+                totalCost += summaryCost
+                log.info("Dagelijks overzicht klaar, kosten \${}", "%.5f".format(summaryCost))
+            } catch (e: Exception) {
+                log.error("Dagelijks overzicht mislukt: {}", e.message)
             }
+        }
 
         return DailyFetchResult(allItems, categoryResults, totalCost)
     }

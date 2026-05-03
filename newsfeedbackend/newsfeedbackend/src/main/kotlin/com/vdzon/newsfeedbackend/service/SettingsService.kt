@@ -43,5 +43,6 @@ class SettingsService(
         CategorySettings("web_dev", "Web Development", enabled = true, isSystem = false, preferredCount = 3, maxCount = 5,
             websites = listOf("web.dev", "css-tricks.com", "smashingmagazine.com", "thenewstack.io", "frontendmasters.com")),
         CategorySettings("overig", "Overig", enabled = true, isSystem = true),
+        CategorySettings("dagelijks-overzicht", "Dagelijks overzicht", enabled = true, isSystem = true),
     )
 }

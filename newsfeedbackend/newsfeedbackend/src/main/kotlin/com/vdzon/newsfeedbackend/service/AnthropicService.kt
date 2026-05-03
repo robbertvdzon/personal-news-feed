@@ -1,5 +1,6 @@
 package com.vdzon.newsfeedbackend.service
 
+import com.vdzon.newsfeedbackend.model.NewsItem
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.client.SimpleClientHttpRequestFactory
@@ -7,6 +8,8 @@ import org.springframework.stereotype.Service
 import org.springframework.web.client.RestClient
 import tools.jackson.databind.ObjectMapper
 import tools.jackson.module.kotlin.readValue
+import java.time.Instant
+import java.util.UUID
 import java.util.concurrent.Semaphore
 
 data class SummarizedArticle(
@@ -199,6 +202,87 @@ class AnthropicService(
         val query = text.trim().removeSurrounding("\"")
         log.info("Gegenereerde zoekquery voor '{}': '{}'", categoryName, query)
         return query.ifBlank { "$categoryName news" }
+    }
+
+    // Genereert een dagelijks redactioneel overzicht van alle gevonden artikelen
+    fun generateDailySummary(articles: List<NewsItem>, categories: List<String>): Pair<NewsItem, Double> {
+        if (articles.isEmpty()) {
+            val empty = NewsItem(
+                id = UUID.randomUUID().toString(),
+                title = "Dagelijks overzicht",
+                summary = "Geen artikelen beschikbaar voor het dagelijks overzicht.",
+                url = "",
+                category = "dagelijks-overzicht",
+                timestamp = Instant.now().toString(),
+                source = "Daily Summary",
+                isSummary = true
+            )
+            return Pair(empty, 0.0)
+        }
+
+        val categoryList = categories.joinToString(", ")
+        val articleList = articles.take(50).mapIndexed { i, a ->
+            "${i + 1}. [${a.category}] ${a.title}\n   ${a.summary.take(200)}"
+        }.joinToString("\n\n")
+
+        val prompt = """
+            Je bent een Nederlandse techredacteur die een dagelijkse briefing schrijft.
+
+            Schrijf een dagelijks redactioneel overzicht van 500-700 woorden op basis van de onderstaande nieuwsartikelen.
+
+            Categorieën van vandaag: $categoryList
+
+            Artikelen:
+            $articleList
+
+            Richtlijnen:
+            - Schrijf in vloeiend, journalistiek Nederlands
+            - Groepeer per thema of categorie — NIET als opsomming
+            - Benoem de hot topics van vandaag
+            - Schrijf als een redactioneel essay, niet als een lijst
+            - Vermeld geen artikelnummers, URLs of bronnamen letterlijk
+            - Gebruik meerdere alinea's, gescheiden door een lege regel
+            - Eindig met een korte conclusie of vooruitblik
+
+            Geef je antwoord als ALLEEN een JSON object (geen uitleg, geen markdown):
+            {
+              "title": "Dagelijks overzicht — [thema of datum]",
+              "summary": "Eerste alinea.\n\nTweede alinea.\n\nDerde alinea."
+            }
+        """.trimIndent()
+
+        val (text, cost) = callWithRetry(prompt, summaryModel)
+        val json = extractJsonObject(text)
+        return try {
+            val root = objectMapper.readTree(json)
+            val title = root.path("title").asText("Dagelijks overzicht")
+            val summaryText = root.path("summary").asText(text.take(1000))
+            val item = NewsItem(
+                id = UUID.randomUUID().toString(),
+                title = title,
+                summary = summaryText,
+                url = "",
+                category = "dagelijks-overzicht",
+                timestamp = Instant.now().toString(),
+                source = "Daily Summary",
+                isSummary = true
+            )
+            log.info("Dagelijks overzicht gegenereerd: '{}'", title)
+            Pair(item, cost)
+        } catch (e: Exception) {
+            log.error("Dagelijks overzicht parsen mislukt: {}", e.message)
+            val item = NewsItem(
+                id = UUID.randomUUID().toString(),
+                title = "Dagelijks overzicht",
+                summary = text.take(1000),
+                url = "",
+                category = "dagelijks-overzicht",
+                timestamp = Instant.now().toString(),
+                source = "Daily Summary",
+                isSummary = true
+            )
+            Pair(item, cost)
+        }
     }
 
     // Samenvatten van een artikel op basis van de volledige tekst (Tavily content)

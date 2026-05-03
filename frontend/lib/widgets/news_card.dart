@@ -28,6 +28,8 @@ class NewsCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (item.isSummary) return _SummaryCard(item: item, allItems: allItems, index: index);
+
     final feedback = ref.watch(feedbackProvider);
     final liked = feedback[item.id]; // bool? — null=geen, true=👍, false=👎
     final readItems = ref.watch(readItemsProvider);
@@ -176,6 +178,133 @@ class NewsCard extends ConsumerWidget {
       ),
       ), // Card
     ); // Dismissible
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Speciale kaart voor het dagelijks overzicht
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _SummaryCard extends ConsumerWidget {
+  final NewsItem item;
+  final List<NewsItem> allItems;
+  final int index;
+
+  const _SummaryCard({
+    required this.item,
+    required this.allItems,
+    required this.index,
+  });
+
+  String _formatTime(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 60) return '${diff.inMinutes} min geleden';
+    if (diff.inHours < 24) return '${diff.inHours} uur geleden';
+    return '${diff.inDays} dag${diff.inDays == 1 ? '' : 'en'} geleden';
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final readItems = ref.watch(readItemsProvider);
+    final isRead = readItems.contains(item.id);
+    final starredItems = ref.watch(starredItemsProvider);
+    final isStarred = starredItems.contains(item.id);
+
+    return Dismissible(
+      key: ValueKey(item.id),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.red,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Icon(Icons.delete, color: Colors.white),
+      ),
+      onDismissed: (_) => ref.read(newsProvider.notifier).deleteItem(item.id),
+      child: Card(
+        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        elevation: isRead ? 0 : 2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: Colors.blue.shade200, width: 1),
+        ),
+        color: isRead ? Colors.blue[50]?.withValues(alpha: 0.5) : Colors.blue[50],
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ItemDetailScreen(
+                items: allItems,
+                initialIndex: index,
+              ),
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.summarize, size: 16, color: Colors.blue[700]),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Dagelijks overzicht',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: Colors.blue[700],
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.3,
+                          ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      _formatTime(item.timestamp),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.blue[400],
+                          ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  item.title,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: isRead ? FontWeight.normal : FontWeight.w700,
+                        color: isRead ? Colors.blue[300] : Colors.blue[900],
+                      ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  item.summary,
+                  maxLines: 4,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: isRead ? Colors.blue[200] : Colors.blue[800],
+                        height: 1.4,
+                      ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    _StarButton(
+                      active: isStarred,
+                      onTap: () => ref
+                          .read(starredItemsProvider.notifier)
+                          .toggleStar(item.id),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

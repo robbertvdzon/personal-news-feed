@@ -10,5 +10,6 @@ data class NewsItem(
     val source: String,
     val isRead: Boolean = false,
     val starred: Boolean = false,
-    val liked: Boolean? = null   // null = geen feedback, true = geliked, false = gedisliked
+    val liked: Boolean? = null,   // null = geen feedback, true = geliked, false = gedisliked
+    val isSummary: Boolean = false
 )

@@ -9,6 +9,7 @@ class NewsItem {
   final bool isRead;
   final bool starred;
   final bool? liked; // null = geen feedback, true = geliked, false = gedisliked
+  final bool isSummary;
 
   const NewsItem({
     required this.id,
@@ -21,6 +22,7 @@ class NewsItem {
     this.isRead = false,
     this.starred = false,
     this.liked,
+    this.isSummary = false,
   });
 
   factory NewsItem.fromJson(Map<String, dynamic> json) {
@@ -35,10 +37,11 @@ class NewsItem {
       isRead: json['isRead'] as bool? ?? false,
       starred: json['starred'] as bool? ?? false,
       liked: json['liked'] as bool?,
+      isSummary: json['isSummary'] as bool? ?? false,
     );
   }
 
-  NewsItem copyWith({bool? isRead, bool? starred, Object? liked = _sentinel}) => NewsItem(
+  NewsItem copyWith({bool? isRead, bool? starred, bool? isSummary, Object? liked = _sentinel}) => NewsItem(
         id: id,
         title: title,
         summary: summary,
@@ -49,6 +52,7 @@ class NewsItem {
         isRead: isRead ?? this.isRead,
         starred: starred ?? this.starred,
         liked: liked == _sentinel ? this.liked : liked as bool?,
+        isSummary: isSummary ?? this.isSummary,
       );
 }
 
