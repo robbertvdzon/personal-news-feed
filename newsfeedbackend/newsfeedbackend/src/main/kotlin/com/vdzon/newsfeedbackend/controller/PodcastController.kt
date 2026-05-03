@@ -1,6 +1,7 @@
 package com.vdzon.newsfeedbackend.controller
 
 import com.vdzon.newsfeedbackend.model.Podcast
+import com.vdzon.newsfeedbackend.model.TtsProvider
 import com.vdzon.newsfeedbackend.service.PodcastService
 import org.springframework.core.io.FileSystemResource
 import org.springframework.core.io.Resource
@@ -37,7 +38,10 @@ class PodcastController(private val podcastService: PodcastService) {
             ?.filterIsInstance<String>()
             ?.filter { it.isNotBlank() }
             ?: emptyList()
-        return podcastService.create(auth.name, periodDays, durationMinutes, customTopics)
+        val ttsProvider = try {
+            TtsProvider.valueOf((body["ttsProvider"] as? String)?.uppercase() ?: "OPENAI")
+        } catch (_: Exception) { TtsProvider.OPENAI }
+        return podcastService.create(auth.name, periodDays, durationMinutes, customTopics, ttsProvider)
     }
 
     @GetMapping("/{id}")

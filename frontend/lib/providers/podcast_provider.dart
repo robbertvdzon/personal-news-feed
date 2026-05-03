@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../models/podcast.dart';
+import '../models/podcast.dart' show Podcast, TtsProvider;
 import '../services/api_service.dart';
 import 'auth_provider.dart';
 
@@ -41,11 +41,13 @@ class PodcastNotifier extends AsyncNotifier<List<Podcast>> {
     required int periodDays,
     required int durationMinutes,
     List<String> customTopics = const [],
+    TtsProvider ttsProvider = TtsProvider.openai,
   }) async {
     final podcast = await ApiService.createPodcast(
       periodDays: periodDays,
       durationMinutes: durationMinutes,
       customTopics: customTopics,
+      ttsProvider: ttsProvider,
     );
     final current = state.valueOrNull ?? [];
     state = AsyncData([podcast, ...current]);

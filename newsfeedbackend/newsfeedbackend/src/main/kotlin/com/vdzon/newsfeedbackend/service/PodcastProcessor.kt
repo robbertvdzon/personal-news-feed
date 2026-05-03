@@ -2,6 +2,7 @@ package com.vdzon.newsfeedbackend.service
 
 import com.vdzon.newsfeedbackend.model.Podcast
 import com.vdzon.newsfeedbackend.model.PodcastStatus
+import com.vdzon.newsfeedbackend.model.TtsProvider
 import org.slf4j.LoggerFactory
 import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Service
@@ -13,7 +14,8 @@ class PodcastProcessor(
     private val storageService: StorageService,
     private val newsService: NewsService,
     private val anthropicService: AnthropicService,
-    private val openAITtsService: OpenAITtsService
+    private val openAITtsService: OpenAITtsService,
+    private val elevenLabsTtsService: ElevenLabsTtsService
 ) {
     private val log = LoggerFactory.getLogger(PodcastProcessor::class.java)
 
@@ -59,10 +61,14 @@ class PodcastProcessor(
                 it.copy(scriptText = scriptText, topics = topics, status = PodcastStatus.GENERATING_AUDIO)
             }
 
-            // Audio genereren (twee stemmen)
+            // Audio genereren via gekozen provider
             val audioDir = storageService.audioDirForUser(username)
             val audioFile = File(audioDir, "$podcastId.mp3")
-            val (durationSeconds, ttsCost) = openAITtsService.generateAudio(scriptText, audioFile)
+            log.info("Audio genereren via {} voor {}", podcast.ttsProvider, username)
+            val (durationSeconds, ttsCost) = when (podcast.ttsProvider) {
+                TtsProvider.ELEVENLABS -> elevenLabsTtsService.generateAudio(scriptText, audioFile)
+                else -> openAITtsService.generateAudio(scriptText, audioFile)
+            }
             val totalCost = scriptCost + topicsCost + ttsCost
 
             updatePodcast(username, podcastId) {

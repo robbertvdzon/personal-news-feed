@@ -4,6 +4,10 @@ enum class PodcastStatus {
     PENDING, GENERATING_SCRIPT, GENERATING_AUDIO, DONE, FAILED
 }
 
+enum class TtsProvider {
+    OPENAI, ELEVENLABS
+}
+
 data class Podcast(
     val id: String,
     val title: String,
@@ -17,5 +21,6 @@ data class Podcast(
     val audioPath: String? = null,
     val durationSeconds: Int? = null,
     val costUsd: Double = 0.0,
-    val customTopics: List<String> = emptyList()
+    val customTopics: List<String> = emptyList(),
+    val ttsProvider: TtsProvider = TtsProvider.OPENAI
 )

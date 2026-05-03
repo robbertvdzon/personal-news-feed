@@ -43,6 +43,8 @@ enum PodcastStatus {
   }
 }
 
+enum TtsProvider { openai, elevenlabs }
+
 class Podcast {
   final String id;
   final String title;
@@ -55,8 +57,8 @@ class Podcast {
   final double costUsd;
   final List<String> topics;
   final String? scriptText;
-
   final List<String> customTopics;
+  final TtsProvider ttsProvider;
 
   const Podcast({
     required this.id,
@@ -71,6 +73,7 @@ class Podcast {
     this.topics = const [],
     this.scriptText,
     this.customTopics = const [],
+    this.ttsProvider = TtsProvider.openai,
   });
 
   factory Podcast.fromJson(Map<String, dynamic> json) => Podcast(
@@ -92,5 +95,8 @@ class Podcast {
                 ?.map((e) => e as String)
                 .toList() ??
             [],
+        ttsProvider: (json['ttsProvider'] as String?) == 'ELEVENLABS'
+            ? TtsProvider.elevenlabs
+            : TtsProvider.openai,
       );
 }

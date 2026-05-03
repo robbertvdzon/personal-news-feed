@@ -4,7 +4,7 @@ import '../config/app_config.dart';
 import '../models/category.dart';
 import '../models/news_item.dart';
 import '../models/news_request.dart';
-import '../models/podcast.dart';
+import '../models/podcast.dart' show Podcast, TtsProvider;
 
 class ApiService {
   static final _client = http.Client();
@@ -157,10 +157,12 @@ class ApiService {
     required int periodDays,
     required int durationMinutes,
     List<String> customTopics = const [],
+    TtsProvider ttsProvider = TtsProvider.openai,
   }) async {
     final body = <String, dynamic>{
       'periodDays': periodDays,
       'durationMinutes': durationMinutes,
+      'ttsProvider': ttsProvider.name.toUpperCase(),
     };
     if (customTopics.isNotEmpty) body['customTopics'] = customTopics;
     final response = await _client.post(

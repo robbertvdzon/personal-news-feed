@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../models/podcast.dart';
+import '../models/podcast.dart' show Podcast, PodcastStatus, TtsProvider;
 import '../providers/audio_player_provider.dart';
 import '../providers/podcast_provider.dart';
 import '../services/api_service.dart';
@@ -67,11 +67,12 @@ class PodcastScreen extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (_) => _CreatePodcastDialog(
-        onConfirm: (periodDays, durationMinutes, customTopics) async {
+        onConfirm: (periodDays, durationMinutes, customTopics, ttsProvider) async {
           await ref.read(podcastProvider.notifier).create(
                 periodDays: periodDays,
                 durationMinutes: durationMinutes,
                 customTopics: customTopics,
+                ttsProvider: ttsProvider,
               );
         },
       ),
@@ -245,6 +246,22 @@ class _PodcastCard extends ConsumerWidget {
                   ],
                   if (isDone) ...[
                     const Spacer(),
+                    if (podcast.ttsProvider == TtsProvider.elevenlabs)
+                      Container(
+                        margin: const EdgeInsets.only(right: 6),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.purple[50],
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.purple[200]!),
+                        ),
+                        child: Text('11Labs',
+                            style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.purple[700],
+                                fontWeight: FontWeight.w600)),
+                      ),
                     _StatusChip(status: podcast.status),
                   ],
                 ],
@@ -804,7 +821,10 @@ class _ScriptView extends StatelessWidget {
 
 class _CreatePodcastDialog extends StatefulWidget {
   final Future<void> Function(
-      int periodDays, int durationMinutes, List<String> customTopics) onConfirm;
+      int periodDays,
+      int durationMinutes,
+      List<String> customTopics,
+      TtsProvider ttsProvider) onConfirm;
   const _CreatePodcastDialog({required this.onConfirm});
 
   @override
@@ -814,6 +834,7 @@ class _CreatePodcastDialog extends StatefulWidget {
 class _CreatePodcastDialogState extends State<_CreatePodcastDialog> {
   int _periodDays = 7;
   bool _loading = false;
+  TtsProvider _ttsProvider = TtsProvider.elevenlabs;
 
   final _durationController = TextEditingController(text: '10');
   final _topicsController = TextEditingController();
@@ -917,6 +938,30 @@ class _CreatePodcastDialogState extends State<_CreatePodcastDialog> {
                 ),
               ),
             ),
+            const SizedBox(height: 16),
+            _Label('Stemmen'),
+            const SizedBox(height: 6),
+            Column(
+              children: [
+                _ProviderTile(
+                  value: TtsProvider.elevenlabs,
+                  groupValue: _ttsProvider,
+                  title: 'ElevenLabs',
+                  subtitle: 'Nederlandstalige stemmen · eleven_multilingual_v2',
+                  color: Colors.purple[700]!,
+                  onChanged: (v) => setState(() => _ttsProvider = v),
+                ),
+                const SizedBox(height: 6),
+                _ProviderTile(
+                  value: TtsProvider.openai,
+                  groupValue: _ttsProvider,
+                  title: 'OpenAI TTS',
+                  subtitle: 'Engelse stemmen · tts-1 · snelheid 1.2×',
+                  color: Colors.teal[700]!,
+                  onChanged: (v) => setState(() => _ttsProvider = v),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -942,7 +987,7 @@ class _CreatePodcastDialogState extends State<_CreatePodcastDialog> {
                   setState(() => _loading = true);
                   try {
                     await widget.onConfirm(
-                        _periodDays, dur, _customTopics);
+                        _periodDays, dur, _customTopics, _ttsProvider);
                     if (context.mounted) Navigator.of(context).pop();
                   } finally {
                     if (mounted) setState(() => _loading = false);
@@ -975,4 +1020,67 @@ class _Label extends StatelessWidget {
             .labelLarge
             ?.copyWith(fontWeight: FontWeight.w600),
       );
+}
+
+class _ProviderTile extends StatelessWidget {
+  final TtsProvider value;
+  final TtsProvider groupValue;
+  final String title;
+  final String subtitle;
+  final Color color;
+  final void Function(TtsProvider) onChanged;
+
+  const _ProviderTile({
+    required this.value,
+    required this.groupValue,
+    required this.title,
+    required this.subtitle,
+    required this.color,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = value == groupValue;
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () => onChanged(value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: selected ? color : Colors.grey[300]!,
+            width: selected ? 2 : 1,
+          ),
+          color: selected ? color.withValues(alpha: 0.07) : null,
+        ),
+        child: Row(
+          children: [
+            Icon(
+              selected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+              color: selected ? color : Colors.grey[400],
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                          color: selected ? color : null)),
+                  Text(subtitle,
+                      style: TextStyle(
+                          fontSize: 11, color: Colors.grey[600])),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

@@ -2,6 +2,7 @@ package com.vdzon.newsfeedbackend.service
 
 import com.vdzon.newsfeedbackend.model.Podcast
 import com.vdzon.newsfeedbackend.model.PodcastStatus
+import com.vdzon.newsfeedbackend.model.TtsProvider
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.io.File
@@ -23,7 +24,7 @@ class PodcastService(
     fun getById(username: String, id: String): Podcast? =
         storageService.loadPodcasts(username).firstOrNull { it.id == id }
 
-    fun create(username: String, periodDays: Int, durationMinutes: Int, customTopics: List<String> = emptyList()): Podcast {
+    fun create(username: String, periodDays: Int, durationMinutes: Int, customTopics: List<String> = emptyList(), ttsProvider: TtsProvider = TtsProvider.OPENAI): Podcast {
         val id = UUID.randomUUID().toString()
         val period = when (periodDays) {
             1 -> "Vandaag"
@@ -43,12 +44,13 @@ class PodcastService(
             durationMinutes = durationMinutes,
             status = PodcastStatus.PENDING,
             createdAt = Instant.now().toString(),
-            customTopics = customTopics
+            customTopics = customTopics,
+            ttsProvider = ttsProvider
         )
         val podcasts = storageService.loadPodcasts(username).toMutableList()
         podcasts.add(0, podcast)
         storageService.savePodcasts(username, podcasts)
-        log.info("Podcast aangemaakt voor {}: {}d / {}min, onderwerpen={}", username, periodDays, durationMinutes, customTopics)
+        log.info("Podcast aangemaakt voor {}: {}d / {}min, provider={}, onderwerpen={}", username, periodDays, durationMinutes, ttsProvider, customTopics)
         podcastProcessor.process(username, id)
         return podcast
     }
