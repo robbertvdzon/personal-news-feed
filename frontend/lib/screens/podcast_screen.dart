@@ -1,5 +1,7 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart';
 import '../models/podcast.dart';
 import '../providers/podcast_provider.dart';
@@ -270,12 +272,18 @@ class _AudioPlayerWidgetState extends ConsumerState<_AudioPlayerWidget> {
     try {
       final token = ApiService.currentToken;
       final url = ApiService.podcastAudioUrl(widget.podcastId);
-      await _player.setAudioSource(
-        AudioSource.uri(
-          Uri.parse(url),
-          headers: token != null ? {'Authorization': 'Bearer $token'} : {},
-        ),
+
+      // Download audio bytes via http (ondersteunt auth headers op alle platforms,
+      // inclusief web waar AudioSource.uri geen custom headers kan meesturen).
+      final response = await http.get(
+        Uri.parse(url),
+        headers: token != null ? {'Authorization': 'Bearer $token'} : {},
       );
+      if (response.statusCode != 200) {
+        throw Exception('HTTP ${response.statusCode}');
+      }
+
+      await _player.setAudioSource(_BytesAudioSource(response.bodyBytes));
       setState(() => _initialized = true);
     } catch (e) {
       if (mounted) {
@@ -562,6 +570,28 @@ class _EmptyState extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// StreamAudioSource op basis van bytes — werkt op alle platforms incl. web
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _BytesAudioSource extends StreamAudioSource {
+  final Uint8List bytes;
+  _BytesAudioSource(this.bytes);
+
+  @override
+  Future<StreamAudioResponse> request([int? start, int? end]) async {
+    start ??= 0;
+    end ??= bytes.length;
+    return StreamAudioResponse(
+      sourceLength: bytes.length,
+      contentLength: end - start,
+      offset: start,
+      stream: Stream.value(bytes.sublist(start, end)),
+      contentType: 'audio/mpeg',
     );
   }
 }

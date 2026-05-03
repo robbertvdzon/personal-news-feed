@@ -57,21 +57,28 @@ class OpenAITtsService(
             ))
 
             try {
-                val bytes = client.post()
+                val (statusCode, bytes) = client.post()
                     .uri("/v1/audio/speech")
                     .body(bodyJson)
                     .exchange { _, response ->
-                        response.body.readBytes()
+                        Pair(response.statusCode.value(), response.body.readBytes())
                     }
 
-                if (bytes != null && bytes.isNotEmpty()) {
+                if (statusCode == 200 && bytes != null && bytes.isNotEmpty()) {
                     buffer.write(bytes)
                     totalChars += text.length
                     segmentCount++
                     log.debug("TTS segment {}: {} chars, {} bytes, stem={}", segmentCount, text.length, bytes.size, voice)
+                } else if (bytes != null) {
+                    val errorBody = bytes.toString(Charsets.UTF_8).take(300)
+                    log.error("OpenAI TTS HTTP {}: {}", statusCode, errorBody)
+                    throw RuntimeException("OpenAI TTS HTTP $statusCode: $errorBody")
                 }
+            } catch (e: RuntimeException) {
+                throw e   // doorgoooien zodat PodcastProcessor FAILED zet
             } catch (e: Exception) {
                 log.error("TTS fout voor segment (stem={}): {}", voice, e.message)
+                throw RuntimeException("TTS segment mislukt: ${e.message}", e)
             }
         }
 
