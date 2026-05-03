@@ -13,6 +13,7 @@ data class Podcast(
     val status: PodcastStatus = PodcastStatus.PENDING,
     val createdAt: String,
     val scriptText: String? = null,
+    val topics: List<String> = emptyList(),
     val audioPath: String? = null,
     val durationSeconds: Int? = null,
     val costUsd: Double = 0.0

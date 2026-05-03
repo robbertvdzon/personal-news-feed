@@ -35,6 +35,12 @@ class PodcastController(private val podcastService: PodcastService) {
         return podcastService.create(auth.name, periodDays, durationMinutes)
     }
 
+    @GetMapping("/{id}")
+    fun getById(@PathVariable id: String, auth: Authentication): ResponseEntity<Podcast> {
+        val podcast = podcastService.getById(auth.name, id) ?: return ResponseEntity.notFound().build()
+        return ResponseEntity.ok(podcast)
+    }
+
     @GetMapping("/{id}/audio")
     fun getAudio(@PathVariable id: String, auth: Authentication): ResponseEntity<Resource> {
         val file = podcastService.getAudioFile(auth.name, id)

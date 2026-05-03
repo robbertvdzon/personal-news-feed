@@ -18,7 +18,10 @@ class PodcastService(
     fun getAll(username: String): List<Podcast> =
         storageService.loadPodcasts(username)
             .sortedByDescending { it.createdAt }
-            .map { it.copy(scriptText = null) }   // script niet meesturen naar frontend
+            .map { it.copy(scriptText = null) }   // script niet meesturen in de lijst
+
+    fun getById(username: String, id: String): Podcast? =
+        storageService.loadPodcasts(username).firstOrNull { it.id == id }
 
     fun create(username: String, periodDays: Int, durationMinutes: Int): Podcast {
         val id = UUID.randomUUID().toString()

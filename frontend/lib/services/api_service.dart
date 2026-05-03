@@ -168,6 +168,17 @@ class ApiService {
     return Podcast.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
   }
 
+  static Future<Podcast> fetchPodcastDetail(String id) async {
+    final response = await _client.get(
+      Uri.parse('${AppConfig.apiBaseUrl}/api/podcasts/$id'),
+      headers: _headers,
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Fout bij ophalen podcast detail: ${response.statusCode}');
+    }
+    return Podcast.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
   static Future<void> deletePodcast(String id) async {
     await _client.delete(
       Uri.parse('${AppConfig.apiBaseUrl}/api/podcasts/$id'),

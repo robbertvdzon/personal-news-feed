@@ -165,6 +165,19 @@ class _PodcastCard extends ConsumerWidget {
                 const Divider(height: 1),
                 const SizedBox(height: 8),
                 _AudioPlayerWidget(podcastId: podcast.id),
+                const SizedBox(height: 4),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: () => _showDetails(context, podcast.id),
+                    icon: const Icon(Icons.article_outlined, size: 16),
+                    label: const Text('Onderwerpen & draaiboek'),
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      foregroundColor: Colors.grey[600],
+                    ),
+                  ),
+                ),
               ],
 
               // Laadindicator tijdens genereren
@@ -186,6 +199,18 @@ class _PodcastCard extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+
+  void _showDetails(BuildContext context, String podcastId) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => _PodcastDetailSheet(podcastId: podcastId),
     );
   }
 
@@ -570,6 +595,236 @@ class _EmptyState extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Bottom sheet: onderwerpen + draaiboek
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _PodcastDetailSheet extends StatefulWidget {
+  final String podcastId;
+  const _PodcastDetailSheet({required this.podcastId});
+
+  @override
+  State<_PodcastDetailSheet> createState() => _PodcastDetailSheetState();
+}
+
+class _PodcastDetailSheetState extends State<_PodcastDetailSheet>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabs;
+  Podcast? _detail;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabs = TabController(length: 2, vsync: this);
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final detail = await ApiService.fetchPodcastDetail(widget.podcastId);
+      setState(() {
+        _detail = detail;
+        _loading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.85,
+      minChildSize: 0.4,
+      maxChildSize: 0.95,
+      expand: false,
+      builder: (_, scrollController) => Column(
+        children: [
+          // Greep + titel
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: Column(
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  _detail?.title ?? 'Details',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          TabBar(
+            controller: _tabs,
+            tabs: const [
+              Tab(text: 'Onderwerpen'),
+              Tab(text: 'Draaiboek'),
+            ],
+          ),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _error != null
+                    ? Center(child: Text('Fout: $_error'))
+                    : TabBarView(
+                        controller: _tabs,
+                        children: [
+                          _TopicsTab(topics: _detail?.topics ?? []),
+                          _ScriptTab(
+                            script: _detail?.scriptText ?? '',
+                            scrollController: scrollController,
+                          ),
+                        ],
+                      ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TopicsTab extends StatelessWidget {
+  final List<String> topics;
+  const _TopicsTab({required this.topics});
+
+  @override
+  Widget build(BuildContext context) {
+    if (topics.isEmpty) {
+      return const Center(child: Text('Geen onderwerpen beschikbaar.'));
+    }
+    return ListView.separated(
+      padding: const EdgeInsets.all(16),
+      itemCount: topics.length,
+      separatorBuilder: (_, __) => const Divider(height: 1),
+      itemBuilder: (_, i) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Row(
+          children: [
+            Container(
+              width: 28,
+              height: 28,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primaryContainer,
+                shape: BoxShape.circle,
+              ),
+              child: Text(
+                '${i + 1}',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                topics[i],
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ScriptTab extends StatelessWidget {
+  final String script;
+  final ScrollController scrollController;
+  const _ScriptTab({required this.script, required this.scrollController});
+
+  @override
+  Widget build(BuildContext context) {
+    if (script.isEmpty) {
+      return const Center(child: Text('Draaiboek niet beschikbaar.'));
+    }
+    final lines = script.split('\n').where((l) => l.trim().isNotEmpty).toList();
+    return ListView.builder(
+      controller: scrollController,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+      itemCount: lines.length,
+      itemBuilder: (_, i) {
+        final line = lines[i];
+        final isInterviewer = line.startsWith('INTERVIEWER:');
+        final isGuest = line.startsWith('GAST:');
+        final speaker = isInterviewer
+            ? 'Interviewer'
+            : isGuest
+                ? 'Gast'
+                : null;
+        final text = (isInterviewer || isGuest)
+            ? line.substring(line.indexOf(':') + 1).trim()
+            : line;
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (speaker != null)
+                Text(
+                  speaker,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: isInterviewer
+                        ? Theme.of(context).colorScheme.primary
+                        : Colors.teal[700],
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: isInterviewer
+                      ? Theme.of(context)
+                          .colorScheme
+                          .primaryContainer
+                          .withValues(alpha: 0.4)
+                      : isGuest
+                          ? Colors.teal[50]
+                          : Colors.grey[100],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  text,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        height: 1.5,
+                      ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

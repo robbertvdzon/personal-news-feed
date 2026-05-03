@@ -53,6 +53,8 @@ class Podcast {
   final DateTime createdAt;
   final int? durationSeconds;
   final double costUsd;
+  final List<String> topics;
+  final String? scriptText;
 
   const Podcast({
     required this.id,
@@ -64,6 +66,8 @@ class Podcast {
     required this.createdAt,
     this.durationSeconds,
     this.costUsd = 0.0,
+    this.topics = const [],
+    this.scriptText,
   });
 
   factory Podcast.fromJson(Map<String, dynamic> json) => Podcast(
@@ -76,5 +80,10 @@ class Podcast {
         createdAt: DateTime.parse(json['createdAt'] as String),
         durationSeconds: json['durationSeconds'] as int?,
         costUsd: (json['costUsd'] as num?)?.toDouble() ?? 0.0,
+        topics: (json['topics'] as List<dynamic>?)
+                ?.map((e) => e as String)
+                .toList() ??
+            [],
+        scriptText: json['scriptText'] as String?,
       );
 }

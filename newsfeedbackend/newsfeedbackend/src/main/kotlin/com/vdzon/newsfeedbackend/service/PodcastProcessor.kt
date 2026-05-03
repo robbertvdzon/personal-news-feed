@@ -51,15 +51,18 @@ class PodcastProcessor(
                 previousTopics = previousTopics
             )
 
+            // Onderwerpen extraheren uit het script
+            val (topics, topicsCost) = anthropicService.extractPodcastTopics(scriptText)
+
             updatePodcast(username, podcastId) {
-                it.copy(scriptText = scriptText, status = PodcastStatus.GENERATING_AUDIO)
+                it.copy(scriptText = scriptText, topics = topics, status = PodcastStatus.GENERATING_AUDIO)
             }
 
             // Audio genereren (twee stemmen)
             val audioDir = storageService.audioDirForUser(username)
             val audioFile = File(audioDir, "$podcastId.mp3")
             val (durationSeconds, ttsCost) = openAITtsService.generateAudio(scriptText, audioFile)
-            val totalCost = scriptCost + ttsCost
+            val totalCost = scriptCost + topicsCost + ttsCost
 
             updatePodcast(username, podcastId) {
                 it.copy(

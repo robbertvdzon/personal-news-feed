@@ -204,6 +204,37 @@ class AnthropicService(
         return query.ifBlank { "$categoryName news" }
     }
 
+    // Extraheert de besproken onderwerpen uit een podcast-script
+    fun extractPodcastTopics(scriptText: String): Pair<List<String>, Double> {
+        val prompt = """
+            Analyseer het volgende podcast-script en geef een lijst van de besproken onderwerpen.
+
+            Script:
+            ${scriptText.take(8000)}
+
+            Regels:
+            - Geef 5 tot 10 concrete onderwerpen die daadwerkelijk besproken zijn
+            - Elk onderwerp is 2 tot 6 woorden
+            - In het Nederlands
+            - Retourneer ALLEEN een JSON-array, geen uitleg:
+            ["Onderwerp 1", "Onderwerp 2", "Onderwerp 3"]
+        """.trimIndent()
+
+        val (text, cost) = callWithRetry(prompt, summaryModel)
+        return try {
+            val start = text.indexOf('[')
+            val end = text.lastIndexOf(']')
+            val json = if (start != -1 && end != -1) text.substring(start, end + 1) else "[]"
+            val root = objectMapper.readTree(json)
+            val topics = (0 until root.size()).map { root.get(it).asText("") }.filter { it.isNotBlank() }
+            log.info("Podcast onderwerpen geëxtraheerd: {}", topics)
+            Pair(topics, cost)
+        } catch (e: Exception) {
+            log.error("Podcast onderwerpen parsen mislukt: {}", e.message)
+            Pair(emptyList(), cost)
+        }
+    }
+
     // Schrijft een Nederlandstalig podcast-interview-script
     fun generatePodcastScript(
         articles: List<NewsItem>,
