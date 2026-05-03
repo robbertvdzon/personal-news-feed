@@ -45,23 +45,109 @@ class AnthropicService(
             .build()
     }
 
-    // Genereert een goede Engelse zoekquery voor Tavily op basis van categorie + extra instructies
-    fun generateSearchQuery(categoryName: String, extraInstructions: String): String {
+    // Fase 2: selecteert de beste artikelen op basis van titels + snippets + feedback
+    fun selectArticles(
+        articles: List<TavilySearchResult>,
+        categoryName: String,
+        extraInstructions: String,
+        preferredCount: Int,
+        maxCount: Int,
+        likedTitles: List<String> = emptyList(),
+        dislikedTitles: List<String> = emptyList()
+    ): Pair<List<Int>, Double> {
+        if (articles.isEmpty()) return Pair(emptyList(), 0.0)
+
+        val instructionsPart = if (extraInstructions.isNotBlank())
+            "\n\nUser's specific interests:\n$extraInstructions"
+        else ""
+
+        val likedPart = if (likedTitles.isNotEmpty())
+            "\n\nUser liked these articles (select similar ones):\n" +
+                    likedTitles.take(10).joinToString("\n") { "- \"$it\"" }
+        else ""
+
+        val dislikedPart = if (dislikedTitles.isNotEmpty())
+            "\n\nUser disliked these articles (avoid similar ones):\n" +
+                    dislikedTitles.take(10).joinToString("\n") { "- \"$it\"" }
+        else ""
+
+        val articleList = articles.mapIndexed { i, a ->
+            "${i + 1}. Title: \"${a.title}\"\n   Snippet: ${a.snippet.take(200)}"
+        }.joinToString("\n\n")
+
+        val prompt = """
+            You are a news curator. Select the $preferredCount to $maxCount most relevant articles for the user.
+
+            Category: $categoryName$instructionsPart$likedPart$dislikedPart
+
+            Articles to evaluate:
+            $articleList
+
+            Rules:
+            - Select between $preferredCount and $maxCount articles
+            - Prefer articles that match the user's specific interests and liked examples
+            - Avoid articles similar to disliked examples
+            - Avoid duplicate topics
+            - Return ONLY a JSON object, no explanation:
+            {"selected": [1, 3, 5]}
+            (use 1-based article numbers)
+        """.trimIndent()
+
+        val (text, cost) = callWithRetry(prompt, summaryModel)
+        return try {
+            val json = extractJsonObject(text)
+            val root = objectMapper.readTree(json)
+            val selectedArray = root.path("selected")
+            val indices = mutableListOf<Int>()
+            for (i in 0 until selectedArray.size()) {
+                val num = selectedArray.get(i).asInt(0)
+                if (num >= 1 && num <= articles.size) {
+                    indices.add(num - 1)  // 0-based
+                }
+            }
+            log.info("Selectie voor '{}': {}/{} artikelen gekozen", categoryName, indices.size, articles.size)
+            Pair(indices.take(maxCount), cost)
+        } catch (e: Exception) {
+            log.error("Selectie parsen mislukt: {}", e.message)
+            // fallback: gewoon de eerste preferredCount
+            Pair((0 until minOf(preferredCount, articles.size)).toList(), cost)
+        }
+    }
+
+    // Genereert een goede Engelse zoekquery voor Tavily op basis van categorie + extra instructies + feedback
+    fun generateSearchQuery(
+        categoryName: String,
+        extraInstructions: String,
+        likedTitles: List<String> = emptyList(),
+        dislikedTitles: List<String> = emptyList()
+    ): String {
         val instructionsPart = if (extraInstructions.isNotBlank())
             "\n\nAdditional context about what the user is interested in:\n$extraInstructions"
         else ""
 
-        val prompt = """
-            You are a search query expert. Generate a concise and effective English news search query for Tavily.
+        val likedPart = if (likedTitles.isNotEmpty())
+            "\n\nUser liked these articles recently (find more like these):\n" +
+                    likedTitles.take(10).joinToString("\n") { "- \"$it\"" }
+        else ""
 
-            Category: $categoryName$instructionsPart
+        val dislikedPart = if (dislikedTitles.isNotEmpty())
+            "\n\nUser disliked these articles recently (avoid similar content):\n" +
+                    dislikedTitles.take(10).joinToString("\n") { "- \"$it\"" }
+        else ""
+
+        val prompt = """
+            You are a search query expert. Generate a concise and effective English search query for recent news articles.
+
+            Category: $categoryName$instructionsPart$likedPart$dislikedPart
 
             Rules:
-            - Write ONLY the search query, nothing else
+            - Write ONLY the search query, nothing else — no explanation, no quotes
             - In English
-            - 3-8 words, focused on recent news
-            - Include "news" or relevant temporal terms if appropriate
-            - Target the most relevant and specific aspect based on the context
+            - 4-8 words
+            - Target specific recent EVENTS, STORIES or DEVELOPMENTS — NOT news websites, aggregators or platforms about the topic
+            - Bad example for "positive news": "positive news websites today" → finds news aggregator sites
+            - Good example for "positive news": "inspiring breakthroughs human achievement 2025" → finds actual stories
+            - Focus on what is HAPPENING, not on media COVERING the topic
         """.trimIndent()
 
         val (text, _) = callWithRetry(prompt, summaryModel)

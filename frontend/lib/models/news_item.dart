@@ -7,6 +7,8 @@ class NewsItem {
   final DateTime timestamp;
   final String source;
   final bool isRead;
+  final bool starred;
+  final bool? liked; // null = geen feedback, true = geliked, false = gedisliked
 
   const NewsItem({
     required this.id,
@@ -17,6 +19,8 @@ class NewsItem {
     required this.timestamp,
     required this.source,
     this.isRead = false,
+    this.starred = false,
+    this.liked,
   });
 
   factory NewsItem.fromJson(Map<String, dynamic> json) {
@@ -29,10 +33,12 @@ class NewsItem {
       timestamp: DateTime.parse(json['timestamp'] as String),
       source: json['source'] as String,
       isRead: json['isRead'] as bool? ?? false,
+      starred: json['starred'] as bool? ?? false,
+      liked: json['liked'] as bool?,
     );
   }
 
-  NewsItem copyWith({bool? isRead}) => NewsItem(
+  NewsItem copyWith({bool? isRead, bool? starred, Object? liked = _sentinel}) => NewsItem(
         id: id,
         title: title,
         summary: summary,
@@ -41,5 +47,9 @@ class NewsItem {
         timestamp: timestamp,
         source: source,
         isRead: isRead ?? this.isRead,
+        starred: starred ?? this.starred,
+        liked: liked == _sentinel ? this.liked : liked as bool?,
       );
 }
+
+const _sentinel = Object();

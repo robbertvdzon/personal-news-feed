@@ -17,6 +17,14 @@ class RequestProcessor(
     private val newsService: NewsService,
     private val webSocketHandler: RequestWebSocketHandler
 ) {
+    private fun loadFeedback(username: String): FeedbackContext {
+        val liked = newsService.getLikedItems(username).map { it.title }
+        val disliked = newsService.getDislikedItems(username).map { it.title }
+        if (liked.isNotEmpty() || disliked.isNotEmpty()) {
+            log.info("Feedback context: {} geliked, {} gedisliked", liked.size, disliked.size)
+        }
+        return FeedbackContext(likedTitles = liked, dislikedTitles = disliked)
+    }
     private val log = LoggerFactory.getLogger(RequestProcessor::class.java)
 
     @Async
@@ -24,11 +32,13 @@ class RequestProcessor(
         updateStatus(username, request.id, RequestStatus.PROCESSING)
         try {
             val categories = settingsService.getSettings(username)
+            val feedback = loadFeedback(username)
             val (articles, costUsd) = realNewsSourceService.fetchArticlesForSubject(
                 subject = request.subject,
                 preferredCount = request.preferredCount,
                 extraInstructions = request.extraInstructions,
                 categories = categories,
+                feedback = feedback,
                 onArticle = { item ->
                     newsService.addItems(username, listOf(item))
                     log.info("Artikel direct toegevoegd: '{}'", item.title.take(50))
@@ -51,8 +61,10 @@ class RequestProcessor(
         updateStatus(username, requestId, RequestStatus.PROCESSING)
         try {
             val categories = settingsService.getSettings(username)
+            val feedback = loadFeedback(username)
             val fetchResult = realNewsSourceService.fetchDailyNews(
                 categories = categories,
+                feedback = feedback,
                 onArticle = { item ->
                     newsService.addItems(username, listOf(item))
                     log.info("Dagelijks artikel direct toegevoegd: '{}'", item.title.take(50))

@@ -14,7 +14,13 @@ data class DailyFetchResult(
     val totalCostUsd: Double
 )
 
+data class FeedbackContext(
+    val likedTitles: List<String> = emptyList(),
+    val dislikedTitles: List<String> = emptyList()
+)
+
 private val SYSTEM_CATEGORY_IDS = setOf("overig")
+private const val SEARCH_POOL_SIZE = 20   // Tavily max = 20 per call
 
 @Service
 class RealNewsSourceService(
@@ -25,6 +31,7 @@ class RealNewsSourceService(
 
     fun fetchDailyNews(
         categories: List<CategorySettings>,
+        feedback: FeedbackContext = FeedbackContext(),
         onArticle: (NewsItem) -> Unit = {}
     ): DailyFetchResult {
         val allItems = mutableListOf<NewsItem>()
@@ -34,36 +41,19 @@ class RealNewsSourceService(
         categories
             .filter { it.enabled && !it.isSystem && it.id !in SYSTEM_CATEGORY_IDS }
             .forEach { cat ->
-                log.info("Zoekquery genereren voor categorie '{}'", cat.name)
-                val query = anthropicService.generateSearchQuery(cat.name, cat.extraInstructions)
-                val articles = tavilyService.search(
-                    query = query,
-                    maxResults = cat.preferredCount
+                val (items, cost) = fetchAndSummarize(
+                    subject = cat.name,
+                    extraInstructions = cat.extraInstructions,
+                    preferredCount = cat.preferredCount,
+                    maxCount = cat.maxCount,
+                    categoryId = cat.id,
+                    feedback = feedback,
+                    onArticle = onArticle
                 )
-
-                if (articles.isEmpty()) {
-                    log.warn("Geen artikelen gevonden voor categorie '{}'", cat.name)
-                    categoryResults.add(CategoryResult(cat.id, cat.name, 0, 0.0))
-                    return@forEach
-                }
-
-                val now = Instant.now().toString()
-                var summaryCost = 0.0
-                val items = mutableListOf<NewsItem>()
-
-                articles.forEach { article ->
-                    log.info("Samenvatting voor '{}' ({})", article.title.take(40), cat.name)
-                    val (summarized, cost) = anthropicService.summarizeArticle(article, cat.name)
-                    val item = summarized.toNewsItem(cat.id, now)
-                    onArticle(item)
-                    items.add(item)
-                    summaryCost += cost
-                }
-
                 allItems.addAll(items)
-                totalCost += summaryCost
-                categoryResults.add(CategoryResult(cat.id, cat.name, items.size, summaryCost))
-                log.info("Categorie '{}': {} artikelen, kosten \${}", cat.name, items.size, "%.5f".format(summaryCost))
+                totalCost += cost
+                categoryResults.add(CategoryResult(cat.id, cat.name, items.size, cost))
+                log.info("Categorie '{}': {} artikelen, kosten \${}", cat.name, items.size, "%.5f".format(cost))
             }
 
         return DailyFetchResult(allItems, categoryResults, totalCost)
@@ -74,33 +64,97 @@ class RealNewsSourceService(
         preferredCount: Int,
         extraInstructions: String = "",
         categories: List<CategorySettings>,
+        feedback: FeedbackContext = FeedbackContext(),
         onArticle: (NewsItem) -> Unit = {}
     ): Pair<List<NewsItem>, Double> {
-        log.info("Zoekquery genereren voor onderwerp '{}'", subject)
-        val query = anthropicService.generateSearchQuery(subject, extraInstructions)
-        val articles = tavilyService.search(query = query, maxResults = preferredCount)
+        val categoryId = detectCategory(subject, categories)
+        val (items, cost) = fetchAndSummarize(
+            subject = subject,
+            extraInstructions = extraInstructions,
+            preferredCount = preferredCount,
+            maxCount = preferredCount,
+            categoryId = categoryId,
+            feedback = feedback,
+            onArticle = onArticle
+        )
+        log.info("Onderwerp '{}': {} artikelen, kosten \${}", subject, items.size, "%.5f".format(cost))
+        return Pair(items, cost)
+    }
 
-        if (articles.isEmpty()) {
-            log.warn("Geen artikelen gevonden voor onderwerp '{}'", subject)
+    // ── Gedeeld pipeline: query → zoek → selecteer → extract → samenvatten ────
+
+    private fun fetchAndSummarize(
+        subject: String,
+        extraInstructions: String,
+        preferredCount: Int,
+        maxCount: Int,
+        categoryId: String,
+        feedback: FeedbackContext,
+        onArticle: (NewsItem) -> Unit
+    ): Pair<List<NewsItem>, Double> {
+        var totalCost = 0.0
+
+        // Stap 1: Claude genereert een gerichte Engelse zoekquery (met feedback context)
+        log.info("Zoekquery genereren voor '{}'", subject)
+        val query = anthropicService.generateSearchQuery(
+            categoryName = subject,
+            extraInstructions = extraInstructions,
+            likedTitles = feedback.likedTitles,
+            dislikedTitles = feedback.dislikedTitles
+        )
+
+        // Stap 2: Tavily zoekt een pool van kandidaat-artikelen (alleen titels + snippets)
+        val searchResults = tavilyService.search(query = query, maxResults = SEARCH_POOL_SIZE)
+        if (searchResults.isEmpty()) {
+            log.warn("Geen zoekresultaten voor '{}'", subject)
             return Pair(emptyList(), 0.0)
         }
 
+        // Stap 3: Claude selecteert de meest relevante artikelen (met feedback context)
+        val (selectedIndices, selectionCost) = anthropicService.selectArticles(
+            articles = searchResults,
+            categoryName = subject,
+            extraInstructions = extraInstructions,
+            preferredCount = preferredCount,
+            maxCount = maxCount,
+            likedTitles = feedback.likedTitles,
+            dislikedTitles = feedback.dislikedTitles
+        )
+        totalCost += selectionCost
+
+        if (selectedIndices.isEmpty()) {
+            log.warn("Geen artikelen geselecteerd voor '{}'", subject)
+            return Pair(emptyList(), totalCost)
+        }
+
+        // Stap 4: Tavily haalt de volledige tekst op voor de geselecteerde URLs
+        val selectedResults = selectedIndices.map { searchResults[it] }
+        val extractedContent = tavilyService.extractContent(selectedResults.map { it.url })
+
+        // Maak TavilyArticle objecten met volledige tekst (of snippet als fallback)
+        val articles = selectedResults.map { result ->
+            TavilyArticle(
+                title = result.title,
+                url = result.url,
+                source = result.source,
+                content = extractedContent[result.url]?.takeIf { it.length > 200 } ?: result.snippet
+            )
+        }
+
+        // Stap 5: Claude maakt een Nederlandse samenvatting per artikel
         val now = Instant.now().toString()
-        val categoryId = detectCategory(subject, categories)
-        var totalCost = 0.0
-        val allItems = mutableListOf<NewsItem>()
+        val newsItems = mutableListOf<NewsItem>()
 
         articles.forEach { article ->
-            log.info("Samenvatting voor '{}'", article.title.take(40))
+            log.info("Samenvatting voor '{}' ({})", article.title.take(40), subject)
             val (summarized, cost) = anthropicService.summarizeArticle(article, subject)
             val item = summarized.toNewsItem(categoryId, now)
             onArticle(item)
-            allItems.add(item)
+            newsItems.add(item)
             totalCost += cost
         }
 
-        log.info("Onderwerp '{}': {} artikelen, kosten \${}", subject, allItems.size, "%.5f".format(totalCost))
-        return Pair(allItems, totalCost)
+        return Pair(newsItems, totalCost)
     }
 
     private fun detectCategory(subject: String, categories: List<CategorySettings>): String {

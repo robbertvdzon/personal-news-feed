@@ -8,5 +8,7 @@ data class NewsItem(
     val category: String,
     val timestamp: String,
     val source: String,
-    val isRead: Boolean = false
+    val isRead: Boolean = false,
+    val starred: Boolean = false,
+    val liked: Boolean? = null   // null = geen feedback, true = geliked, false = gedisliked
 )

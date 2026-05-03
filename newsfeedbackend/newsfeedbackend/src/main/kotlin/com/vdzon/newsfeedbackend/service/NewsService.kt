@@ -45,6 +45,28 @@ class NewsService(
         storageService.saveNews(username, items)
     }
 
+    fun setFeedback(username: String, id: String, liked: Boolean?) {
+        val items = storageService.loadNews(username).toMutableList()
+        val index = items.indexOfFirst { it.id == id }
+        if (index == -1) return
+        items[index] = items[index].copy(liked = liked)
+        storageService.saveNews(username, items)
+    }
+
+    fun getLikedItems(username: String): List<NewsItem> =
+        storageService.loadNews(username).filter { it.liked == true }
+
+    fun getDislikedItems(username: String): List<NewsItem> =
+        storageService.loadNews(username).filter { it.liked == false }
+
+    fun toggleStar(username: String, id: String) {
+        val items = storageService.loadNews(username).toMutableList()
+        val index = items.indexOfFirst { it.id == id }
+        if (index == -1) return
+        items[index] = items[index].copy(starred = !items[index].starred)
+        storageService.saveNews(username, items)
+    }
+
     fun refresh(username: String) {
         log.info("Nieuws verversen voor gebruiker: {}", username)
         val categories = settingsService.getSettings(username)

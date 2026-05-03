@@ -103,6 +103,21 @@ class ApiService {
     );
   }
 
+  static Future<void> toggleStar(String id) async {
+    await _client.put(
+      Uri.parse('${AppConfig.apiBaseUrl}/api/news/$id/star'),
+      headers: _headers,
+    );
+  }
+
+  static Future<void> setFeedback(String id, bool? liked) async {
+    await _client.put(
+      Uri.parse('${AppConfig.apiBaseUrl}/api/news/$id/feedback'),
+      headers: _headers,
+      body: jsonEncode({'liked': liked}),
+    );
+  }
+
   static Future<NewsRequest> createRequest({
     required String subject,
     String? sourceItemId,

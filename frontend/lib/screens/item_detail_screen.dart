@@ -60,10 +60,25 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
   Widget build(BuildContext context) {
     final total = widget.items.length;
 
+    final currentItem = widget.items[_currentIndex];
+    final starredItems = ref.watch(starredItemsProvider);
+    final isStarred = starredItems.contains(currentItem.id);
+
     return Scaffold(
       appBar: AppBar(
-        title: Text('${ _currentIndex + 1} / $total'),
+        title: Text('${_currentIndex + 1} / $total'),
         centerTitle: true,
+        actions: [
+          IconButton(
+            tooltip: isStarred ? 'Verwijder uit bewaard' : 'Bewaar artikel',
+            icon: Icon(
+              isStarred ? Icons.star : Icons.star_border,
+              color: isStarred ? Colors.amber[600] : null,
+            ),
+            onPressed: () =>
+                ref.read(starredItemsProvider.notifier).toggleStar(currentItem.id),
+          ),
+        ],
       ),
       body: PageView.builder(
         controller: _pageController,

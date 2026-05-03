@@ -118,6 +118,13 @@ class _CategoryTabBar extends ConsumerWidget {
     final categories = ref.watch(settingsProvider).valueOrNull ?? [];
     final enabledCategories = categories.where((c) => c.enabled).toList();
     final selected = ref.watch(selectedCategoryProvider);
+    final showStarred = ref.watch(showStarredProvider);
+    final starredItems = ref.watch(starredItemsProvider);
+
+    void selectCategory(String? catId) {
+      ref.read(showStarredProvider.notifier).state = false;
+      ref.read(selectedCategoryProvider.notifier).state = catId;
+    }
 
     return SizedBox(
       height: 48,
@@ -127,19 +134,32 @@ class _CategoryTabBar extends ConsumerWidget {
         children: [
           _TabChip(
             label: 'Alles',
-            selected: selected == null,
-            onTap: () =>
-                ref.read(selectedCategoryProvider.notifier).state = null,
+            selected: !showStarred && selected == null,
+            onTap: () => selectCategory(null),
           ),
           ...enabledCategories.map((cat) => Padding(
                 padding: const EdgeInsets.only(left: 8),
                 child: _TabChip(
                   label: cat.name,
-                  selected: selected == cat.id,
-                  onTap: () => ref.read(selectedCategoryProvider.notifier).state =
-                      selected == cat.id ? null : cat.id,
+                  selected: !showStarred && selected == cat.id,
+                  onTap: () => selectCategory(
+                      selected == cat.id && !showStarred ? null : cat.id),
                 ),
               )),
+          if (starredItems.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: _TabChip(
+                label: '⭐ Bewaard (${starredItems.length})',
+                selected: showStarred,
+                onTap: () {
+                  ref.read(showStarredProvider.notifier).state = !showStarred;
+                  if (!showStarred) {
+                    ref.read(selectedCategoryProvider.notifier).state = null;
+                  }
+                },
+              ),
+            ),
         ],
       ),
     );

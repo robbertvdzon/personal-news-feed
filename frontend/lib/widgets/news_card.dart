@@ -29,9 +29,11 @@ class NewsCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final feedback = ref.watch(feedbackProvider);
-    final liked = feedback[item.id];
+    final liked = feedback[item.id]; // bool? — null=geen, true=👍, false=👎
     final readItems = ref.watch(readItemsProvider);
     final isRead = readItems.contains(item.id);
+    final starredItems = ref.watch(starredItemsProvider);
+    final isStarred = starredItems.contains(item.id);
     final categories = ref.watch(settingsProvider).valueOrNull ?? [];
     final category = categories.isEmpty
         ? Category(id: item.category, name: item.category)
@@ -156,6 +158,13 @@ class NewsCard extends ConsumerWidget {
                               .read(feedbackProvider.notifier)
                               .setFeedback(item.id, false),
                         ),
+                        const SizedBox(width: 4),
+                        _StarButton(
+                          active: isStarred,
+                          onTap: () => ref
+                              .read(starredItemsProvider.notifier)
+                              .toggleStar(item.id),
+                        ),
                       ],
                     ),
                   ],
@@ -195,6 +204,33 @@ class _FeedbackButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(icon, style: const TextStyle(fontSize: 16)),
+      ),
+    );
+  }
+}
+
+class _StarButton extends StatelessWidget {
+  final bool active;
+  final VoidCallback onTap;
+
+  const _StarButton({required this.active, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        decoration: BoxDecoration(
+          color: active ? Colors.amber[50] : Colors.grey[100],
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Icon(
+          active ? Icons.star : Icons.star_border,
+          size: 18,
+          color: active ? Colors.amber[600] : Colors.grey[400],
+        ),
       ),
     );
   }
