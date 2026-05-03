@@ -193,9 +193,11 @@ final filteredNewsProvider = Provider<List<NewsItem>>((ref) {
   }
 
   return items
-      .where((item) => enabledIds.contains(item.category))
+      .where((item) => item.isSummary || enabledIds.contains(item.category))
       .where((item) =>
-          selectedCategory == null || item.category == selectedCategory)
+          item.isSummary ||
+          selectedCategory == null ||
+          item.category == selectedCategory)
       .where((item) => showRead || !readItems.contains(item.id))
       .toList()
     ..sort((a, b) => b.timestamp.compareTo(a.timestamp));

@@ -65,6 +65,7 @@ class RealNewsSourceService(
                 log.info("Dagelijks overzicht genereren op basis van {} artikelen", allItems.size)
                 val (summaryItem, summaryCost) = anthropicService.generateDailySummary(allItems, categoryNames)
                 allItems.add(0, summaryItem)
+                onArticle(summaryItem)   // ook via streaming callback opslaan
                 totalCost += summaryCost
                 log.info("Dagelijks overzicht klaar, kosten \${}", "%.5f".format(summaryCost))
             } catch (e: Exception) {

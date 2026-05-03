@@ -9,8 +9,13 @@ class SettingsService(
     private val anthropicService: AnthropicService
 ) {
 
-    fun getSettings(username: String): List<CategorySettings> =
-        storageService.loadSettings(username) ?: defaultCategories()
+    fun getSettings(username: String): List<CategorySettings> {
+        val saved = storageService.loadSettings(username) ?: return defaultCategories()
+        // Zorg dat systeemcategorieën altijd aanwezig zijn (bijv. na een update)
+        val systemDefaults = defaultCategories().filter { it.isSystem }
+        val missingSystem = systemDefaults.filter { def -> saved.none { it.id == def.id } }
+        return if (missingSystem.isEmpty()) saved else saved + missingSystem
+    }
 
     fun saveSettings(username: String, categories: List<CategorySettings>) =
         storageService.saveSettings(username, categories)
