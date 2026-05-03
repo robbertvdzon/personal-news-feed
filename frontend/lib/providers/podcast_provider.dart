@@ -40,10 +40,12 @@ class PodcastNotifier extends AsyncNotifier<List<Podcast>> {
   Future<Podcast> create({
     required int periodDays,
     required int durationMinutes,
+    List<String> customTopics = const [],
   }) async {
     final podcast = await ApiService.createPodcast(
       periodDays: periodDays,
       durationMinutes: durationMinutes,
+      customTopics: customTopics,
     );
     final current = state.valueOrNull ?? [];
     state = AsyncData([podcast, ...current]);

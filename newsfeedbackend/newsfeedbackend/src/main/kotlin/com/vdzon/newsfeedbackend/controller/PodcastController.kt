@@ -27,12 +27,17 @@ class PodcastController(private val podcastService: PodcastService) {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     fun create(
-        @RequestBody body: Map<String, Int>,
+        @RequestBody body: Map<String, Any>,
         auth: Authentication
     ): Podcast {
-        val periodDays = body["periodDays"] ?: 7
-        val durationMinutes = body["durationMinutes"] ?: 10
-        return podcastService.create(auth.name, periodDays, durationMinutes)
+        val periodDays = (body["periodDays"] as? Number)?.toInt() ?: 7
+        val durationMinutes = (body["durationMinutes"] as? Number)?.toInt() ?: 10
+        @Suppress("UNCHECKED_CAST")
+        val customTopics = (body["customTopics"] as? List<*>)
+            ?.filterIsInstance<String>()
+            ?.filter { it.isNotBlank() }
+            ?: emptyList()
+        return podcastService.create(auth.name, periodDays, durationMinutes, customTopics)
     }
 
     @GetMapping("/{id}")

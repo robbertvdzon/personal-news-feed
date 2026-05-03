@@ -49,10 +49,11 @@ class PodcastScreen extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (_) => _CreatePodcastDialog(
-        onConfirm: (periodDays, durationMinutes) async {
+        onConfirm: (periodDays, durationMinutes, customTopics) async {
           await ref.read(podcastProvider.notifier).create(
                 periodDays: periodDays,
                 durationMinutes: durationMinutes,
+                customTopics: customTopics,
               );
         },
       ),
@@ -119,6 +120,24 @@ class _PodcastCard extends ConsumerWidget {
                   _StatusChip(status: podcast.status),
                 ],
               ),
+              // Eigen onderwerpen tonen
+              if (podcast.customTopics.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: podcast.customTopics
+                      .map((t) => Chip(
+                            label: Text(t,
+                                style: const TextStyle(fontSize: 11)),
+                            padding: EdgeInsets.zero,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            visualDensity: VisualDensity.compact,
+                          ))
+                      .toList(),
+                ),
+              ],
               const SizedBox(height: 6),
               // Meta: datum + duur
               Row(
@@ -468,7 +487,8 @@ class _AudioPlayerWidgetState extends ConsumerState<_AudioPlayerWidget> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _CreatePodcastDialog extends StatefulWidget {
-  final Future<void> Function(int periodDays, int durationMinutes) onConfirm;
+  final Future<void> Function(
+      int periodDays, int durationMinutes, List<String> customTopics) onConfirm;
   const _CreatePodcastDialog({required this.onConfirm});
 
   @override
@@ -477,59 +497,117 @@ class _CreatePodcastDialog extends StatefulWidget {
 
 class _CreatePodcastDialogState extends State<_CreatePodcastDialog> {
   int _periodDays = 7;
-  int _durationMinutes = 10;
   bool _loading = false;
+
+  // Duur als vrij tekstveld
+  final _durationController = TextEditingController(text: '10');
+
+  // Eigen onderwerpen (elke regel = één onderwerp)
+  final _topicsController = TextEditingController();
 
   static const _periods = [
     (label: 'Vandaag', days: 1),
-    (label: 'Afgelopen week', days: 7),
-    (label: 'Afgelopen 2 weken', days: 14),
+    (label: '1 week', days: 7),
+    (label: '2 weken', days: 14),
   ];
 
-  static const _durations = [5, 10, 15, 20];
+  @override
+  void dispose() {
+    _durationController.dispose();
+    _topicsController.dispose();
+    super.dispose();
+  }
+
+  List<String> get _customTopics => _topicsController.text
+      .split('\n')
+      .map((l) => l.trim())
+      .where((l) => l.isNotEmpty)
+      .toList();
+
+  int get _durationMinutes =>
+      int.tryParse(_durationController.text.trim()) ?? 10;
 
   @override
   Widget build(BuildContext context) {
+    final hasTopics = _topicsController.text.trim().isNotEmpty;
+
     return AlertDialog(
       title: const Text('Nieuwe podcast'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Periode',
-              style: Theme.of(context)
-                  .textTheme
-                  .labelLarge
-                  ?.copyWith(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            children: _periods
-                .map((p) => ChoiceChip(
-                      label: Text(p.label),
-                      selected: _periodDays == p.days,
-                      onSelected: (_) => setState(() => _periodDays = p.days),
-                    ))
-                .toList(),
-          ),
-          const SizedBox(height: 20),
-          Text('Duur: $_durationMinutes minuten',
-              style: Theme.of(context)
-                  .textTheme
-                  .labelLarge
-                  ?.copyWith(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 4),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: _durations
-                .map((d) => ChoiceChip(
-                      label: Text('$d min'),
-                      selected: _durationMinutes == d,
-                      onSelected: (_) => setState(() => _durationMinutes = d),
-                    ))
-                .toList(),
-          ),
-        ],
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Eigen onderwerpen ──────────────────────────────────────────
+            _Label('Onderwerpen (optioneel)'),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _topicsController,
+              maxLines: 4,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                hintText: 'Eén onderwerp per regel, bijv.:\nKubernetes 1.33\nAI code assistants',
+                hintStyle: TextStyle(fontSize: 13, color: Colors.grey[400]),
+                border: const OutlineInputBorder(),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                isDense: true,
+                suffixIcon: hasTopics
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, size: 18),
+                        onPressed: () {
+                          _topicsController.clear();
+                          setState(() {});
+                        },
+                      )
+                    : null,
+              ),
+            ),
+            if (hasTopics)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  'Claude gebruikt zijn eigen kennis over deze onderwerpen.',
+                  style: TextStyle(fontSize: 11, color: Colors.blue[700]),
+                ),
+              ),
+            const SizedBox(height: 16),
+
+            // ── Periode ────────────────────────────────────────────────────
+            _Label('Nieuws-periode${hasTopics ? ' (achtergrond)' : ''}'),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 8,
+              children: _periods
+                  .map((p) => ChoiceChip(
+                        label: Text(p.label),
+                        selected: _periodDays == p.days,
+                        onSelected: (_) =>
+                            setState(() => _periodDays = p.days),
+                      ))
+                  .toList(),
+            ),
+            const SizedBox(height: 16),
+
+            // ── Duur ───────────────────────────────────────────────────────
+            _Label('Duur (minuten)'),
+            const SizedBox(height: 6),
+            SizedBox(
+              width: 120,
+              child: TextField(
+                controller: _durationController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  suffixText: 'min',
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  isDense: true,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
       actions: [
         TextButton(
@@ -540,9 +618,17 @@ class _CreatePodcastDialogState extends State<_CreatePodcastDialog> {
           onPressed: _loading
               ? null
               : () async {
+                  final dur = _durationMinutes;
+                  if (dur < 1 || dur > 60) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                          content: Text('Duur moet tussen 1 en 60 minuten liggen')),
+                    );
+                    return;
+                  }
                   setState(() => _loading = true);
                   try {
-                    await widget.onConfirm(_periodDays, _durationMinutes);
+                    await widget.onConfirm(_periodDays, dur, _customTopics);
                     if (context.mounted) Navigator.of(context).pop();
                   } finally {
                     if (mounted) setState(() => _loading = false);
@@ -561,6 +647,21 @@ class _CreatePodcastDialogState extends State<_CreatePodcastDialog> {
       ],
     );
   }
+}
+
+/// Klein hulpwidget voor sectie-labels in de dialog
+class _Label extends StatelessWidget {
+  final String text;
+  const _Label(this.text);
+
+  @override
+  Widget build(BuildContext context) => Text(
+        text,
+        style: Theme.of(context)
+            .textTheme
+            .labelLarge
+            ?.copyWith(fontWeight: FontWeight.w600),
+      );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

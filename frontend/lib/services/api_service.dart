@@ -156,11 +156,17 @@ class ApiService {
   static Future<Podcast> createPodcast({
     required int periodDays,
     required int durationMinutes,
+    List<String> customTopics = const [],
   }) async {
+    final body = <String, dynamic>{
+      'periodDays': periodDays,
+      'durationMinutes': durationMinutes,
+    };
+    if (customTopics.isNotEmpty) body['customTopics'] = customTopics;
     final response = await _client.post(
       Uri.parse('${AppConfig.apiBaseUrl}/api/podcasts'),
       headers: _headers,
-      body: jsonEncode({'periodDays': periodDays, 'durationMinutes': durationMinutes}),
+      body: jsonEncode(body),
     );
     if (response.statusCode != 201) {
       throw Exception('Fout bij aanmaken podcast: ${response.statusCode}');

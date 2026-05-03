@@ -23,7 +23,7 @@ class PodcastService(
     fun getById(username: String, id: String): Podcast? =
         storageService.loadPodcasts(username).firstOrNull { it.id == id }
 
-    fun create(username: String, periodDays: Int, durationMinutes: Int): Podcast {
+    fun create(username: String, periodDays: Int, durationMinutes: Int, customTopics: List<String> = emptyList()): Podcast {
         val id = UUID.randomUUID().toString()
         val period = when (periodDays) {
             1 -> "Vandaag"
@@ -31,19 +31,24 @@ class PodcastService(
             14 -> "Afgelopen 2 weken"
             else -> "Afgelopen $periodDays dagen"
         }
+        val title = if (customTopics.isNotEmpty())
+            "Podcast — ${customTopics.take(2).joinToString(", ")}${if (customTopics.size > 2) "…" else ""}"
+        else
+            "Podcast — $period"
         val podcast = Podcast(
             id = id,
-            title = "Podcast — $period",
+            title = title,
             periodDescription = period,
             periodDays = periodDays,
             durationMinutes = durationMinutes,
             status = PodcastStatus.PENDING,
-            createdAt = Instant.now().toString()
+            createdAt = Instant.now().toString(),
+            customTopics = customTopics
         )
         val podcasts = storageService.loadPodcasts(username).toMutableList()
         podcasts.add(0, podcast)
         storageService.savePodcasts(username, podcasts)
-        log.info("Podcast aangemaakt voor {}: {}d / {}min", username, periodDays, durationMinutes)
+        log.info("Podcast aangemaakt voor {}: {}d / {}min, onderwerpen={}", username, periodDays, durationMinutes, customTopics)
         podcastProcessor.process(username, id)
         return podcast
     }

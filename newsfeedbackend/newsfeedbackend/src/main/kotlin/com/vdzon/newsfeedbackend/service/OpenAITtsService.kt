@@ -53,7 +53,8 @@ class OpenAITtsService(
                 "model" to "tts-1",
                 "input" to text,
                 "voice" to voice,
-                "response_format" to "mp3"
+                "response_format" to "mp3",
+                "speed" to 1.2
             ))
 
             try {

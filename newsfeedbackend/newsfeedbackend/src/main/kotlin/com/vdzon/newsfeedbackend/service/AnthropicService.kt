@@ -240,7 +240,8 @@ class AnthropicService(
         articles: List<NewsItem>,
         periodDays: Int,
         durationMinutes: Int,
-        previousTopics: List<String> = emptyList()
+        previousTopics: List<String> = emptyList(),
+        customTopics: List<String> = emptyList()
     ): Pair<String, Double> {
         val targetWords = durationMinutes * 140
 
@@ -249,35 +250,74 @@ class AnthropicService(
                     previousTopics.take(20).joinToString("\n") { "- $it" }
         else ""
 
-        val articleList = articles.take(30).mapIndexed { i, a ->
-            "${i + 1}. [${a.category}] ${a.title}\n   ${a.summary.take(300)}"
-        }.joinToString("\n\n")
+        val prompt = if (customTopics.isNotEmpty()) {
+            // Modus: gebruiker heeft eigen onderwerpen opgegeven
+            val topicList = customTopics.joinToString("\n") { "- $it" }
+            val contextPart = if (articles.isNotEmpty()) {
+                val articleList = articles.take(20).mapIndexed { i, a ->
+                    "${i + 1}. [${a.category}] ${a.title}\n   ${a.summary.take(300)}"
+                }.joinToString("\n\n")
+                "\n\nAchtergrond — recente artikelen die mogelijk relevant zijn:\n$articleList"
+            } else ""
 
-        val prompt = """
-            Schrijf een Nederlandstalig podcast-interview van circa $durationMinutes minuten (~$targetWords woorden)
-            tussen een INTERVIEWER en een GAST (senior software developer).
+            """
+                Schrijf een Nederlandstalig podcast-interview van circa $durationMinutes minuten (~$targetWords woorden)
+                tussen een INTERVIEWER en een GAST (senior software developer).
 
-            Onderwerp: de laatste $periodDays dag(en) in software-ontwikkeling, AI en cloud.
+                De gebruiker wil de volgende onderwerpen bespreken:
+                $topicList
 
-            Gebaseerd op deze artikelen:
-            $articleList$previousTopicsPart
+                Behandel elk onderwerp uitgebreid. Gebruik je kennis over de meest recente ontwikkelingen.
+                Geef concrete voorbeelden, tools, frameworks of nieuws rondom deze onderwerpen.$contextPart$previousTopicsPart
 
-            Richtlijnen:
-            - Schrijf als een natuurlijk, vloeiend gesprek — geen stijve Q&A
-            - Gebruik korte, duidelijke zinnen geschikt voor audio
-            - INTERVIEWER introduceert onderwerpen en stelt vragen
-            - GAST geeft diepgaande antwoorden vanuit een developer-perspectief
-            - Vermijd moeilijk uit te spreken afkortingen; spreek ze uit (bv. "A I" niet "AI")
-            - Verdeel de spreektijd ongeveer gelijk
-            - Begin met een korte intro van de INTERVIEWER
-            - Eindig met een samenvatting en afsluiting door de INTERVIEWER
+                Richtlijnen:
+                - Schrijf als een natuurlijk, vloeiend gesprek — geen stijve Q&A
+                - Gebruik korte, duidelijke zinnen geschikt voor audio
+                - INTERVIEWER introduceert onderwerpen en stelt vragen
+                - GAST geeft diepgaande antwoorden vanuit een developer-perspectief
+                - Vermijd moeilijk uit te spreken afkortingen; spreek ze uit (bv. "A I" niet "AI")
+                - Verdeel de spreektijd ongeveer gelijk
+                - Begin met een korte intro van de INTERVIEWER die de opgegeven onderwerpen aankondigt
+                - Eindig met een samenvatting en afsluiting door de INTERVIEWER
 
-            VERPLICHT FORMAAT — elke spreekbeurt op exact één regel:
-            INTERVIEWER: [tekst]
-            GAST: [tekst]
+                VERPLICHT FORMAAT — elke spreekbeurt op exact één regel:
+                INTERVIEWER: [tekst]
+                GAST: [tekst]
 
-            Geen andere tekst, geen kopteksten, geen nummers, geen uitleg.
-        """.trimIndent()
+                Geen andere tekst, geen kopteksten, geen nummers, geen uitleg.
+            """.trimIndent()
+        } else {
+            // Modus: gebaseerd op nieuwsartikelen van de afgelopen periode
+            val articleList = articles.take(30).mapIndexed { i, a ->
+                "${i + 1}. [${a.category}] ${a.title}\n   ${a.summary.take(300)}"
+            }.joinToString("\n\n")
+
+            """
+                Schrijf een Nederlandstalig podcast-interview van circa $durationMinutes minuten (~$targetWords woorden)
+                tussen een INTERVIEWER en een GAST (senior software developer).
+
+                Onderwerp: de laatste $periodDays dag(en) in software-ontwikkeling, AI en cloud.
+
+                Gebaseerd op deze artikelen:
+                $articleList$previousTopicsPart
+
+                Richtlijnen:
+                - Schrijf als een natuurlijk, vloeiend gesprek — geen stijve Q&A
+                - Gebruik korte, duidelijke zinnen geschikt voor audio
+                - INTERVIEWER introduceert onderwerpen en stelt vragen
+                - GAST geeft diepgaande antwoorden vanuit een developer-perspectief
+                - Vermijd moeilijk uit te spreken afkortingen; spreek ze uit (bv. "A I" niet "AI")
+                - Verdeel de spreektijd ongeveer gelijk
+                - Begin met een korte intro van de INTERVIEWER
+                - Eindig met een samenvatting en afsluiting door de INTERVIEWER
+
+                VERPLICHT FORMAAT — elke spreekbeurt op exact één regel:
+                INTERVIEWER: [tekst]
+                GAST: [tekst]
+
+                Geen andere tekst, geen kopteksten, geen nummers, geen uitleg.
+            """.trimIndent()
+        }
 
         val (text, cost) = callWithRetry(prompt, summaryModel, maxTokens = 6000)
         val wordCount = text.split("\\s+".toRegex()).size

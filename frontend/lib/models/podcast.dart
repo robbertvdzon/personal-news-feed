@@ -56,6 +56,8 @@ class Podcast {
   final List<String> topics;
   final String? scriptText;
 
+  final List<String> customTopics;
+
   const Podcast({
     required this.id,
     required this.title,
@@ -68,6 +70,7 @@ class Podcast {
     this.costUsd = 0.0,
     this.topics = const [],
     this.scriptText,
+    this.customTopics = const [],
   });
 
   factory Podcast.fromJson(Map<String, dynamic> json) => Podcast(
@@ -85,5 +88,9 @@ class Podcast {
                 .toList() ??
             [],
         scriptText: json['scriptText'] as String?,
+        customTopics: (json['customTopics'] as List<dynamic>?)
+                ?.map((e) => e as String)
+                .toList() ??
+            [],
       );
 }

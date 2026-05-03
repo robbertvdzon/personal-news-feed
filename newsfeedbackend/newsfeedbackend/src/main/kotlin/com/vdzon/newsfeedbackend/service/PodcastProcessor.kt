@@ -48,7 +48,8 @@ class PodcastProcessor(
                 articles = articles,
                 periodDays = podcast.periodDays,
                 durationMinutes = podcast.durationMinutes,
-                previousTopics = previousTopics
+                previousTopics = previousTopics,
+                customTopics = podcast.customTopics
             )
 
             // Onderwerpen extraheren uit het script

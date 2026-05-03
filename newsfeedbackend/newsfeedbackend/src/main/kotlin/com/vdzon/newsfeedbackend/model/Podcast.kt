@@ -16,5 +16,6 @@ data class Podcast(
     val topics: List<String> = emptyList(),
     val audioPath: String? = null,
     val durationSeconds: Int? = null,
-    val costUsd: Double = 0.0
+    val costUsd: Double = 0.0,
+    val customTopics: List<String> = emptyList()
 )
