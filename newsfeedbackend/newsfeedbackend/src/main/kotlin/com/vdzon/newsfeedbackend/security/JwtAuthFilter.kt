@@ -18,10 +18,18 @@ class JwtAuthFilter(private val jwtService: JwtService) : OncePerRequestFilter()
         response: HttpServletResponse,
         chain: FilterChain
     ) {
-        val authHeader = request.getHeader("Authorization")
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            val token = authHeader.removePrefix("Bearer ")
-            val username = jwtService.extractUsername(token)
+        // Token kan via Authorization-header of via ?token= query-param komen
+        // (de query-param-variant is nodig voor audio-streaming in webbrowsers)
+        val rawToken: String? = run {
+            val authHeader = request.getHeader("Authorization")
+            if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                authHeader.removePrefix("Bearer ")
+            } else {
+                request.getParameter("token")
+            }
+        }
+        if (rawToken != null) {
+            val username = jwtService.extractUsername(rawToken)
             if (username != null && SecurityContextHolder.getContext().authentication == null) {
                 val auth = UsernamePasswordAuthenticationToken(username, null, emptyList())
                 auth.details = WebAuthenticationDetailsSource().buildDetails(request)

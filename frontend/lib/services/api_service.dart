@@ -192,8 +192,13 @@ class ApiService {
     );
   }
 
-  static String podcastAudioUrl(String id) =>
-      '${AppConfig.apiBaseUrl}/api/podcasts/$id/audio';
+  /// Audio-URL met token als query-param zodat browsers de stream direct kunnen laden
+  /// zonder dat een custom Authorization-header nodig is.
+  static String podcastAudioUrl(String id) {
+    final base = '${AppConfig.apiBaseUrl}/api/podcasts/$id/audio';
+    final token = _token;
+    return token != null ? '$base?token=${Uri.encodeComponent(token)}' : base;
+  }
 
   static String? get currentToken => _token;
 
