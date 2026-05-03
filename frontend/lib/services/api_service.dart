@@ -53,6 +53,16 @@ class ApiService {
     return list.map((e) => Category.fromJson(e as Map<String, dynamic>)).toList();
   }
 
+  static Future<List<String>> suggestWebsites(String categoryId) async {
+    final response = await _client.post(
+      Uri.parse('${AppConfig.apiBaseUrl}/api/settings/suggest-websites/$categoryId'),
+      headers: _headers,
+    );
+    if (response.statusCode != 200) return [];
+    final list = jsonDecode(response.body) as List<dynamic>;
+    return list.map((e) => e as String).toList();
+  }
+
   static Future<void> saveSettings(List<Category> categories) async {
     await _client.put(
       Uri.parse('${AppConfig.apiBaseUrl}/api/settings'),
@@ -76,6 +86,24 @@ class ApiService {
       Uri.parse('${AppConfig.apiBaseUrl}/api/news/$id'),
       headers: _headers,
     );
+  }
+
+  static Future<int> cleanupNews({
+    required int olderThanDays,
+    required bool keepStarred,
+    required bool keepLiked,
+  }) async {
+    final uri = Uri.parse('${AppConfig.apiBaseUrl}/api/news/cleanup').replace(
+      queryParameters: {
+        'olderThanDays': '$olderThanDays',
+        'keepStarred': '$keepStarred',
+        'keepLiked': '$keepLiked',
+      },
+    );
+    final response = await _client.delete(uri, headers: _headers);
+    if (response.statusCode != 200) return 0;
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    return body['removed'] as int? ?? 0;
   }
 
   static Future<void> deleteRequest(String id) async {

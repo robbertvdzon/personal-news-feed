@@ -53,7 +53,8 @@ class AnthropicService(
         preferredCount: Int,
         maxCount: Int,
         likedTitles: List<String> = emptyList(),
-        dislikedTitles: List<String> = emptyList()
+        dislikedTitles: List<String> = emptyList(),
+        recentTitles: List<String> = emptyList()
     ): Pair<List<Int>, Double> {
         if (articles.isEmpty()) return Pair(emptyList(), 0.0)
 
@@ -71,6 +72,11 @@ class AnthropicService(
                     dislikedTitles.take(10).joinToString("\n") { "- \"$it\"" }
         else ""
 
+        val recentPart = if (recentTitles.isNotEmpty())
+            "\n\nAlready in the feed recently (avoid overlapping topics):\n" +
+                    recentTitles.take(20).joinToString("\n") { "- \"$it\"" }
+        else ""
+
         val articleList = articles.mapIndexed { i, a ->
             "${i + 1}. Title: \"${a.title}\"\n   Snippet: ${a.snippet.take(200)}"
         }.joinToString("\n\n")
@@ -78,7 +84,7 @@ class AnthropicService(
         val prompt = """
             You are a news curator. Select the $preferredCount to $maxCount most relevant articles for the user.
 
-            Category: $categoryName$instructionsPart$likedPart$dislikedPart
+            Category: $categoryName$instructionsPart$likedPart$dislikedPart$recentPart
 
             Articles to evaluate:
             $articleList
@@ -87,7 +93,8 @@ class AnthropicService(
             - Select between $preferredCount and $maxCount articles
             - Prefer articles that match the user's specific interests and liked examples
             - Avoid articles similar to disliked examples
-            - Avoid duplicate topics
+            - Avoid articles that overlap in topic with recently shown items
+            - Avoid duplicate topics within this selection
             - Return ONLY a JSON object, no explanation:
             {"selected": [1, 3, 5]}
             (use 1-based article numbers)
@@ -111,6 +118,44 @@ class AnthropicService(
             log.error("Selectie parsen mislukt: {}", e.message)
             // fallback: gewoon de eerste preferredCount
             Pair((0 until minOf(preferredCount, articles.size)).toList(), cost)
+        }
+    }
+
+    // Stelt geschikte nieuwswebsites voor voor een categorie
+    fun suggestWebsites(categoryName: String, extraInstructions: String): List<String> {
+        val instructionsPart = if (extraInstructions.isNotBlank())
+            "\n\nAdditional context: $extraInstructions"
+        else ""
+
+        val prompt = """
+            Suggest 8 to 12 reliable English-language news websites for the category: "$categoryName"$instructionsPart
+
+            Rules:
+            - Return ONLY a JSON array of domain names, no explanation
+            - Only the domain (e.g. "blog.jetbrains.com", not full URLs)
+            - Prefer sites that publish frequently and have good technical depth
+            - Mix of official blogs, independent publications and aggregators
+            - Example output: ["blog.example.com", "otherdomain.io"]
+        """.trimIndent()
+
+        val (text, _) = callWithRetry(prompt, summaryModel)
+        return try {
+            val json = text.let {
+                val start = it.indexOf('[')
+                val end = it.lastIndexOf(']')
+                if (start != -1 && end != -1) it.substring(start, end + 1) else "[]"
+            }
+            val root = objectMapper.readTree(json)
+            val domains = mutableListOf<String>()
+            for (i in 0 until root.size()) {
+                val domain = root.get(i).asText("").trim()
+                if (domain.isNotBlank()) domains.add(domain)
+            }
+            log.info("Website-suggesties voor '{}': {}", categoryName, domains)
+            domains
+        } catch (e: Exception) {
+            log.error("Website-suggesties parsen mislukt: {}", e.message)
+            emptyList()
         }
     }
 

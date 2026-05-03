@@ -59,6 +59,33 @@ class NewsService(
     fun getDislikedItems(username: String): List<NewsItem> =
         storageService.loadNews(username).filter { it.liked == false }
 
+    fun getRecentItems(username: String, days: Int = 3): List<NewsItem> {
+        val cutoff = java.time.Instant.now().minusSeconds(days * 24L * 3600)
+        return storageService.loadNews(username).filter {
+            try { java.time.Instant.parse(it.timestamp).isAfter(cutoff) } catch (_: Exception) { false }
+        }
+    }
+
+    fun cleanup(username: String, olderThanDays: Int, keepStarred: Boolean, keepLiked: Boolean): Int {
+        val cutoff = java.time.Instant.now().minusSeconds(olderThanDays * 24L * 3600)
+        val items = storageService.loadNews(username)
+        val kept = items.filter { item ->
+            val isOld = try {
+                java.time.Instant.parse(item.timestamp).isBefore(cutoff)
+            } catch (_: Exception) { false }
+            if (!isOld) return@filter true          // bewaar altijd recente items
+            if (keepStarred && item.starred) return@filter true
+            if (keepLiked && item.liked == true) return@filter true
+            false                                   // verwijder
+        }
+        val removed = items.size - kept.size
+        if (removed > 0) {
+            storageService.saveNews(username, kept)
+            log.info("Cleanup voor {}: {} artikelen verwijderd ({} bewaard)", username, removed, kept.size)
+        }
+        return removed
+    }
+
     fun toggleStar(username: String, id: String) {
         val items = storageService.loadNews(username).toMutableList()
         val index = items.indexOfFirst { it.id == id }

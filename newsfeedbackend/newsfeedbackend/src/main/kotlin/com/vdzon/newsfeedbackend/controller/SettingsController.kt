@@ -4,6 +4,8 @@ import com.vdzon.newsfeedbackend.model.CategorySettings
 import com.vdzon.newsfeedbackend.service.SettingsService
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
@@ -22,4 +24,8 @@ class SettingsController(private val settingsService: SettingsService) {
         settingsService.saveSettings(auth.name, categories)
         return categories
     }
+
+    @PostMapping("/suggest-websites/{categoryId}")
+    fun suggestWebsites(@PathVariable categoryId: String, auth: Authentication): List<String> =
+        settingsService.suggestWebsites(auth.name, categoryId)
 }

@@ -135,6 +135,20 @@ class NewsNotifier extends AsyncNotifier<List<NewsItem>> {
     state = AsyncData(items);
   }
 
+  Future<int> cleanupNews({
+    required int olderThanDays,
+    required bool keepStarred,
+    required bool keepLiked,
+  }) async {
+    final removed = await ApiService.cleanupNews(
+      olderThanDays: olderThanDays,
+      keepStarred: keepStarred,
+      keepLiked: keepLiked,
+    );
+    if (removed > 0) await refresh();
+    return removed;
+  }
+
   Future<void> deleteItem(String id) async {
     final current = state.valueOrNull ?? [];
     state = AsyncData(current.where((i) => i.id != id).toList());

@@ -53,6 +53,30 @@ class SettingsNotifier extends AsyncNotifier<List<Category>> {
   Future<void> removeCategory(String categoryId) =>
       _mutate((cats) => cats.where((c) => c.id != categoryId).toList());
 
+  Future<void> updateWebsites(String categoryId, List<String> websites) =>
+      _mutate((cats) => [
+            for (final cat in cats)
+              if (cat.id == categoryId) cat.copyWith(websites: websites) else cat,
+          ]);
+
+  Future<List<String>> suggestWebsites(String categoryId) async {
+    final suggested = await ApiService.suggestWebsites(categoryId);
+    if (suggested.isNotEmpty) {
+      // Backend heeft al opgeslagen, alleen lokaal bijwerken
+      final current = state.valueOrNull ?? [];
+      final updated = [
+        for (final cat in current)
+          if (cat.id == categoryId)
+            cat.copyWith(
+                websites: {...cat.websites, ...suggested}.toList())
+          else
+            cat,
+      ];
+      state = AsyncData(updated);
+    }
+    return suggested;
+  }
+
   Future<void> _mutate(List<Category> Function(List<Category>) updater) async {
     final current = state.valueOrNull ?? [];
     final updated = updater(current);

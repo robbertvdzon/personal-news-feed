@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/auth_provider.dart';
+import '../providers/news_provider.dart';
 import '../providers/settings_provider.dart';
 import '../models/category.dart';
 
@@ -43,6 +44,28 @@ class SettingsScreen extends ConsumerWidget {
           ...visibleCategories.map((cat) => _CategoryRow(category: cat)),
           const SizedBox(height: 8),
           _AddCategoryButton(),
+
+          const SizedBox(height: 24),
+          _SectionHeader('Opruimen'),
+          const SizedBox(height: 4),
+          Text(
+            'Verwijder oude nieuwsartikelen om ruimte vrij te maken.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey[500]),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            margin: const EdgeInsets.only(bottom: 16),
+            child: ListTile(
+              leading: const Icon(Icons.cleaning_services_outlined),
+              title: const Text('Artikelen opruimen'),
+              subtitle: const Text('Verwijder artikelen ouder dan een opgegeven aantal dagen'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => showDialog(
+                context: context,
+                builder: (_) => const _CleanupDialog(),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -142,6 +165,9 @@ class _EditCategoryDialogState extends ConsumerState<_EditCategoryDialog> {
   late TextEditingController _extraController;
   late TextEditingController _preferredController;
   late TextEditingController _maxController;
+  late TextEditingController _websiteController;
+  late List<String> _websites;
+  bool _suggestingWebsites = false;
 
   @override
   void initState() {
@@ -150,6 +176,8 @@ class _EditCategoryDialogState extends ConsumerState<_EditCategoryDialog> {
     _extraController = TextEditingController(text: widget.category.extraInstructions);
     _preferredController = TextEditingController(text: '${widget.category.preferredCount}');
     _maxController = TextEditingController(text: '${widget.category.maxCount}');
+    _websiteController = TextEditingController();
+    _websites = List.from(widget.category.websites);
   }
 
   @override
@@ -158,6 +186,7 @@ class _EditCategoryDialogState extends ConsumerState<_EditCategoryDialog> {
     _extraController.dispose();
     _preferredController.dispose();
     _maxController.dispose();
+    _websiteController.dispose();
     super.dispose();
   }
 
@@ -172,26 +201,63 @@ class _EditCategoryDialogState extends ConsumerState<_EditCategoryDialog> {
     final preferred = int.tryParse(_preferredController.text) ?? widget.category.preferredCount;
     final max = int.tryParse(_maxController.text) ?? widget.category.maxCount;
     notifier.updateCounts(id, preferred, max.clamp(preferred, 99));
+    notifier.updateWebsites(id, _websites);
     Navigator.of(context).pop();
   }
 
+  void _addWebsite() {
+    final domain = _websiteController.text.trim().toLowerCase()
+        .replaceAll(RegExp(r'^https?://'), '')
+        .replaceAll(RegExp(r'/.*'), '');
+    if (domain.isNotEmpty && !_websites.contains(domain)) {
+      setState(() {
+        _websites.add(domain);
+        _websiteController.clear();
+      });
+    }
+  }
+
+  Future<void> _suggestWebsites() async {
+    setState(() => _suggestingWebsites = true);
+    try {
+      final suggested = await ref
+          .read(settingsProvider.notifier)
+          .suggestWebsites(widget.category.id);
+      if (suggested.isNotEmpty && mounted) {
+        setState(() {
+          for (final s in suggested) {
+            if (!_websites.contains(s)) _websites.add(s);
+          }
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _suggestingWebsites = false);
+    }
+  }
+
   void _delete() {
-    Navigator.of(context).pop();
+    // Capture alles vóór de pop, zodat ref en navigators geldig blijven
+    final notifier = ref.read(settingsProvider.notifier);
+    final categoryId = widget.category.id;
+    final categoryName = widget.category.name;
+    final editNav = Navigator.of(context);
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         title: const Text('Categorie verwijderen'),
-        content: Text('Wil je "${widget.category.name}" verwijderen?'),
+        content: Text('Wil je "$categoryName" verwijderen?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(ctx).pop(),
             child: const Text('Annuleren'),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () {
-              ref.read(settingsProvider.notifier).removeCategory(widget.category.id);
-              Navigator.of(context).pop();
+              notifier.removeCategory(categoryId);
+              Navigator.of(ctx).pop(); // sluit bevestiging
+              editNav.pop();           // sluit edit-dialog
             },
             child: const Text('Verwijderen'),
           ),
@@ -202,10 +268,31 @@ class _EditCategoryDialogState extends ConsumerState<_EditCategoryDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Categorie bewerken'),
-      content: SingleChildScrollView(
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+          maxWidth: 560,
+        ),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Titel
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+              child: Text(
+                'Categorie bewerken',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Scrollbare content
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -263,31 +350,123 @@ class _EditCategoryDialogState extends ConsumerState<_EditCategoryDialog> {
                 ),
               ],
             ),
+            const SizedBox(height: 20),
+
+            // Websites sectie
+            Row(
+              children: [
+                Text(
+                  'Nieuwswebsites',
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
+                const Spacer(),
+                _suggestingWebsites
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : TextButton.icon(
+                        onPressed: _suggestWebsites,
+                        icon: const Icon(Icons.auto_awesome, size: 16),
+                        label: const Text('Stel voor'),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            if (_websites.isEmpty)
+              Text(
+                'Geen websites — Tavily zoekt breed',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: Colors.grey[500], fontStyle: FontStyle.italic),
+              )
+            else
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: _websites
+                    .map((w) => Chip(
+                          label: Text(w,
+                              style: const TextStyle(fontSize: 11)),
+                          onDeleted: () =>
+                              setState(() => _websites.remove(w)),
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                          padding: EdgeInsets.zero,
+                          labelPadding:
+                              const EdgeInsets.symmetric(horizontal: 6),
+                        ))
+                    .toList(),
+              ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _websiteController,
+                    decoration: const InputDecoration(
+                      hintText: 'bv. blog.jetbrains.com',
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    ),
+                    style: const TextStyle(fontSize: 13),
+                    onSubmitted: (_) => _addWebsite(),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: _addWebsite,
+                  icon: const Icon(Icons.add),
+                  tooltip: 'Toevoegen',
+                  style: IconButton.styleFrom(
+                    backgroundColor:
+                        Theme.of(context).colorScheme.primaryContainer,
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
-      actions: [
-        Row(
-          children: [
-            TextButton(
-              onPressed: _delete,
-              style: TextButton.styleFrom(foregroundColor: Colors.red),
-              child: const Text('Verwijderen'),
-            ),
-            const Spacer(),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Annuleren'),
-            ),
-            const SizedBox(width: 8),
-            FilledButton(
-              onPressed: _save,
-              child: const Text('Opslaan'),
-            ),
-          ],
-        ),
-      ],
-    );
+    ), // Flexible + SingleChildScrollView
+    const Divider(height: 1),
+    // Altijd-zichtbare actions
+    Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Row(
+        children: [
+          TextButton(
+            onPressed: _delete,
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Verwijderen'),
+          ),
+          const Spacer(),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Annuleren'),
+          ),
+          const SizedBox(width: 8),
+          FilledButton(
+            onPressed: _save,
+            child: const Text('Opslaan'),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+    ),
+            const SizedBox(height: 4),
+          ], // outer Column children
+        ), // outer Column
+      ), // ConstrainedBox
+    ); // Dialog
   }
 }
 
@@ -341,6 +520,143 @@ class _AddCategoryButton extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cleanup dialog
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _CleanupDialog extends ConsumerStatefulWidget {
+  const _CleanupDialog();
+
+  @override
+  ConsumerState<_CleanupDialog> createState() => _CleanupDialogState();
+}
+
+class _CleanupDialogState extends ConsumerState<_CleanupDialog> {
+  int _days = 14;
+  bool _keepStarred = true;
+  bool _keepLiked = true;
+  bool _running = false;
+
+  final _daysController = TextEditingController(text: '14');
+
+  @override
+  void dispose() {
+    _daysController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _runCleanup() async {
+    final days = int.tryParse(_daysController.text.trim()) ?? _days;
+    if (days < 0) return;
+    setState(() => _running = true);
+    try {
+      final removed = await ref.read(newsProvider.notifier).cleanupNews(
+            olderThanDays: days,
+            keepStarred: _keepStarred,
+            keepLiked: _keepLiked,
+          );
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(removed == 0
+              ? 'Geen artikelen verwijderd.'
+              : '$removed artikel${removed == 1 ? '' : 'en'} verwijderd.'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _running = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Artikelen opruimen'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Verwijder artikelen ouder dan:',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              SizedBox(
+                width: 80,
+                child: TextField(
+                  controller: _daysController,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                  ),
+                  onChanged: (v) {
+                    final d = int.tryParse(v);
+                    if (d != null && d >= 0) setState(() => _days = d);
+                  },
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                'dagen',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Bewaar toch:',
+            style: Theme.of(context)
+                .textTheme
+                .bodyMedium
+                ?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          CheckboxListTile(
+            value: _keepStarred,
+            onChanged: (v) => setState(() => _keepStarred = v ?? true),
+            title: const Text('Artikelen met ster ⭐'),
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            dense: true,
+          ),
+          CheckboxListTile(
+            value: _keepLiked,
+            onChanged: (v) => setState(() => _keepLiked = v ?? true),
+            title: const Text('Gelikte artikelen 👍'),
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            dense: true,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _running ? null : () => Navigator.of(context).pop(),
+          child: const Text('Annuleren'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: Colors.red[700]),
+          onPressed: _running ? null : _runCleanup,
+          child: _running
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white),
+                )
+              : const Text('Opruimen'),
+        ),
+      ],
     );
   }
 }

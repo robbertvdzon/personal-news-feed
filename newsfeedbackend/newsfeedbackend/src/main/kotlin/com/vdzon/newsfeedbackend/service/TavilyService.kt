@@ -42,8 +42,8 @@ class TavilyService(
     }
 
     // Fase 1: zoeken — geeft titels + snippets terug, geen volledige tekst
-    fun search(query: String, maxResults: Int = 20, days: Int = 2): List<TavilySearchResult> {
-        val body = mapOf(
+    fun search(query: String, maxResults: Int = 20, days: Int = 2, includeDomains: List<String> = emptyList()): List<TavilySearchResult> {
+        val bodyMap = mutableMapOf<String, Any>(
             "query" to query,
             "search_depth" to "advanced",
             "max_results" to maxResults,
@@ -51,6 +51,11 @@ class TavilyService(
             "include_raw_content" to false,
             "include_answer" to false
         )
+        if (includeDomains.isNotEmpty()) {
+            bodyMap["include_domains"] = includeDomains
+            log.info("Tavily domein-filter: {}", includeDomains)
+        }
+        val body = bodyMap.toMap()
 
         log.info("Tavily zoekopdracht: '{}'  (max {} resultaten)", query, maxResults)
         return try {

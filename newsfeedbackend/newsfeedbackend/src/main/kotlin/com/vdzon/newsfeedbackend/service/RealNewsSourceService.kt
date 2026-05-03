@@ -16,7 +16,8 @@ data class DailyFetchResult(
 
 data class FeedbackContext(
     val likedTitles: List<String> = emptyList(),
-    val dislikedTitles: List<String> = emptyList()
+    val dislikedTitles: List<String> = emptyList(),
+    val recentTitles: List<String> = emptyList()
 )
 
 private val SYSTEM_CATEGORY_IDS = setOf("overig")
@@ -47,6 +48,7 @@ class RealNewsSourceService(
                     preferredCount = cat.preferredCount,
                     maxCount = cat.maxCount,
                     categoryId = cat.id,
+                    websites = cat.websites,
                     feedback = feedback,
                     onArticle = onArticle
                 )
@@ -68,12 +70,14 @@ class RealNewsSourceService(
         onArticle: (NewsItem) -> Unit = {}
     ): Pair<List<NewsItem>, Double> {
         val categoryId = detectCategory(subject, categories)
+        val categoryWebsites = categories.firstOrNull { it.id == categoryId }?.websites ?: emptyList()
         val (items, cost) = fetchAndSummarize(
             subject = subject,
             extraInstructions = extraInstructions,
             preferredCount = preferredCount,
             maxCount = preferredCount,
             categoryId = categoryId,
+            websites = categoryWebsites,
             feedback = feedback,
             onArticle = onArticle
         )
@@ -89,6 +93,7 @@ class RealNewsSourceService(
         preferredCount: Int,
         maxCount: Int,
         categoryId: String,
+        websites: List<String> = emptyList(),
         feedback: FeedbackContext,
         onArticle: (NewsItem) -> Unit
     ): Pair<List<NewsItem>, Double> {
@@ -103,14 +108,23 @@ class RealNewsSourceService(
             dislikedTitles = feedback.dislikedTitles
         )
 
-        // Stap 2: Tavily zoekt een pool van kandidaat-artikelen (alleen titels + snippets)
-        val searchResults = tavilyService.search(query = query, maxResults = SEARCH_POOL_SIZE)
+        // Stap 2: Tavily zoekt in gecureerde websites (met fallback naar breed zoeken)
+        var searchResults = if (websites.isNotEmpty()) {
+            val results = tavilyService.search(query = query, maxResults = SEARCH_POOL_SIZE, includeDomains = websites)
+            if (results.isEmpty()) {
+                log.warn("Geen resultaten binnen gecureerde websites voor '{}', terugvallen op breed zoeken", subject)
+                tavilyService.search(query = query, maxResults = SEARCH_POOL_SIZE)
+            } else results
+        } else {
+            tavilyService.search(query = query, maxResults = SEARCH_POOL_SIZE)
+        }
+
         if (searchResults.isEmpty()) {
             log.warn("Geen zoekresultaten voor '{}'", subject)
             return Pair(emptyList(), 0.0)
         }
 
-        // Stap 3: Claude selecteert de meest relevante artikelen (met feedback context)
+        // Stap 3: Claude selecteert de meest relevante artikelen (met feedback + deduplicatie)
         val (selectedIndices, selectionCost) = anthropicService.selectArticles(
             articles = searchResults,
             categoryName = subject,
@@ -118,7 +132,8 @@ class RealNewsSourceService(
             preferredCount = preferredCount,
             maxCount = maxCount,
             likedTitles = feedback.likedTitles,
-            dislikedTitles = feedback.dislikedTitles
+            dislikedTitles = feedback.dislikedTitles,
+            recentTitles = feedback.recentTitles
         )
         totalCost += selectionCost
 

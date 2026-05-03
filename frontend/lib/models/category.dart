@@ -6,6 +6,7 @@ class Category {
   final bool isSystem;
   int preferredCount;
   int maxCount;
+  List<String> websites;
 
   Category({
     required this.id,
@@ -15,7 +16,8 @@ class Category {
     this.isSystem = false,
     this.preferredCount = 3,
     this.maxCount = 5,
-  });
+    List<String>? websites,
+  }) : websites = websites ?? [];
 
   factory Category.fromJson(Map<String, dynamic> json) => Category(
         id: json['id'] as String,
@@ -25,6 +27,10 @@ class Category {
         isSystem: json['isSystem'] as bool? ?? false,
         preferredCount: json['preferredCount'] as int? ?? 3,
         maxCount: json['maxCount'] as int? ?? 5,
+        websites: (json['websites'] as List<dynamic>?)
+                ?.map((e) => e as String)
+                .toList() ??
+            [],
       );
 
   Map<String, dynamic> toJson() => {
@@ -35,6 +41,7 @@ class Category {
         'isSystem': isSystem,
         'preferredCount': preferredCount,
         'maxCount': maxCount,
+        'websites': websites,
       };
 
   Category copyWith({
@@ -43,6 +50,7 @@ class Category {
     String? extraInstructions,
     int? preferredCount,
     int? maxCount,
+    List<String>? websites,
   }) =>
       Category(
         id: id,
@@ -52,5 +60,6 @@ class Category {
         isSystem: isSystem,
         preferredCount: preferredCount ?? this.preferredCount,
         maxCount: maxCount ?? this.maxCount,
+        websites: websites ?? List.from(this.websites),
       );
 }

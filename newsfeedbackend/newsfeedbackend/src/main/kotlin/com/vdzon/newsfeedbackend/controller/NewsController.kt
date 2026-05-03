@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 
@@ -37,6 +38,17 @@ class NewsController(private val newsService: NewsService) {
     fun toggleStar(@PathVariable id: String, auth: Authentication): Map<String, String> {
         newsService.toggleStar(auth.name, id)
         return mapOf("status" to "ok")
+    }
+
+    @DeleteMapping("/cleanup")
+    fun cleanup(
+        @RequestParam olderThanDays: Int,
+        @RequestParam(defaultValue = "true") keepStarred: Boolean,
+        @RequestParam(defaultValue = "true") keepLiked: Boolean,
+        auth: Authentication
+    ): Map<String, Int> {
+        val removed = newsService.cleanup(auth.name, olderThanDays, keepStarred, keepLiked)
+        return mapOf("removed" to removed)
     }
 
     @PutMapping("/{id}/feedback")
