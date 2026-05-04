@@ -194,12 +194,15 @@ class ApiService {
     );
   }
 
-  /// Audio-URL met token als query-param zodat browsers de stream direct kunnen laden
-  /// zonder dat een custom Authorization-header nodig is.
-  static String podcastAudioUrl(String id) {
+  /// Audio-URL met token als query-param zodat browsers de stream direct kunnen laden.
+  /// [version] (bijv. durationSeconds) wordt als cache-bust meegegeven.
+  static String podcastAudioUrl(String id, {int? version}) {
     final base = '${AppConfig.apiBaseUrl}/api/podcasts/$id/audio';
     final token = _token;
-    return token != null ? '$base?token=${Uri.encodeComponent(token)}' : base;
+    final params = <String>[];
+    if (token != null) params.add('token=${Uri.encodeComponent(token)}');
+    if (version != null) params.add('v=$version');
+    return params.isEmpty ? base : '$base?${params.join('&')}';
   }
 
   static String? get currentToken => _token;

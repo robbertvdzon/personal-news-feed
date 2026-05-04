@@ -76,7 +76,7 @@ class ElevenLabsTtsService(
                     }
 
                 if (statusCode == 200 && bytes != null && bytes.isNotEmpty()) {
-                    buffer.write(bytes)
+                    buffer.write(stripId3Tags(bytes))
                     totalChars += text.length
                     segmentCount++
                     log.debug("ElevenLabs segment {}: {} chars, {} bytes, stem={}", segmentCount, text.length, bytes.size, voiceId)
@@ -110,5 +110,43 @@ class ElevenLabsTtsService(
         val costUsd = totalChars.toDouble() / 1_000.0 * 0.30
         log.info("ElevenLabs klaar: ~{} sec, {} tekens, \${}", estimatedSeconds, totalChars, "%.4f".format(costUsd))
         return Pair(estimatedSeconds, costUsd)
+    }
+
+    /**
+     * Strippt ID3v2-header (begin) en ID3v1-tag (eind) uit een MP3-byte-array.
+     * ElevenLabs voegt per segment een ID3v2-header toe; bij aaneenschakeling van
+     * segmenten herkent de decoder de tweede header als einde-van-bestand.
+     */
+    private fun stripId3Tags(bytes: ByteArray): ByteArray {
+        var start = 0
+        var end = bytes.size
+
+        // Strip ID3v2 aan het begin (magic "ID3")
+        if (bytes.size >= 10 &&
+            bytes[0] == 'I'.code.toByte() &&
+            bytes[1] == 'D'.code.toByte() &&
+            bytes[2] == '3'.code.toByte()
+        ) {
+            // Synchsafe integer (4 × 7 bits) in bytes 6-9
+            val size = ((bytes[6].toInt() and 0x7F) shl 21) or
+                       ((bytes[7].toInt() and 0x7F) shl 14) or
+                       ((bytes[8].toInt() and 0x7F) shl 7) or
+                        (bytes[9].toInt() and 0x7F)
+            start = 10 + size
+            log.debug("ID3v2 gestript: {} bytes overgeslagen", start)
+        }
+
+        // Strip ID3v1 aan het eind (magic "TAG", vaste lengte 128 bytes)
+        if (end - start >= 128 &&
+            bytes[end - 128] == 'T'.code.toByte() &&
+            bytes[end - 127] == 'A'.code.toByte() &&
+            bytes[end - 126] == 'G'.code.toByte()
+        ) {
+            end -= 128
+            log.debug("ID3v1 gestript: 128 bytes verwijderd aan het eind")
+        }
+
+        return if (start == 0 && end == bytes.size) bytes
+        else bytes.copyOfRange(start, end)
     }
 }

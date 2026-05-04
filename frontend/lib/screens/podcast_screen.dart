@@ -426,7 +426,8 @@ class PodcastDetailScreen extends ConsumerWidget {
   }
 
   Future<void> _downloadAudio(String podcastId) async {
-    final url = ApiService.podcastAudioUrl(podcastId);
+    final url = ApiService.podcastAudioUrl(podcastId,
+        version: podcast.durationSeconds);
     await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
   }
 

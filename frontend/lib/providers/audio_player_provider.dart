@@ -110,7 +110,7 @@ class AudioPlayerNotifier extends Notifier<AudioLoadState> {
     try {
       await _player.stop();
 
-      final url = ApiService.podcastAudioUrl(podcastId);
+      final url = ApiService.podcastAudioUrl(podcastId, version: durationSeconds);
       await _player.setAudioSource(AudioSource.uri(Uri.parse(url)));
 
       // Herstel opgeslagen positie
