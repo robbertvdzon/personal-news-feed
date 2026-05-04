@@ -59,6 +59,8 @@ class Podcast {
   final String? scriptText;
   final List<String> customTopics;
   final TtsProvider ttsProvider;
+  final int podcastNumber;
+  final int? generationSeconds;
 
   const Podcast({
     required this.id,
@@ -74,6 +76,8 @@ class Podcast {
     this.scriptText,
     this.customTopics = const [],
     this.ttsProvider = TtsProvider.openai,
+    this.podcastNumber = 0,
+    this.generationSeconds,
   });
 
   factory Podcast.fromJson(Map<String, dynamic> json) => Podcast(
@@ -98,5 +102,7 @@ class Podcast {
         ttsProvider: (json['ttsProvider'] as String?) == 'ELEVENLABS'
             ? TtsProvider.elevenlabs
             : TtsProvider.openai,
+        podcastNumber: json['podcastNumber'] as int? ?? 0,
+        generationSeconds: json['generationSeconds'] as int?,
       );
 }

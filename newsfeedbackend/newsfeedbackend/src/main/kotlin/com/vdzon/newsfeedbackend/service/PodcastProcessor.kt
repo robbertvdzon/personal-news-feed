@@ -8,6 +8,8 @@ import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Service
 import java.io.File
 import java.time.Instant
+import java.time.ZoneId
+import java.time.ZonedDateTime
 
 @Service
 class PodcastProcessor(
@@ -17,16 +19,45 @@ class PodcastProcessor(
     private val openAITtsService: OpenAITtsService,
     private val elevenLabsTtsService: ElevenLabsTtsService
 ) {
+    private val dutchMonths = arrayOf(
+        "januari","februari","maart","april","mei","juni",
+        "juli","augustus","september","oktober","november","december"
+    )
+
+    private fun buildTitle(
+        podcastNumber: Int,
+        customTopics: List<String>,
+        extractedTopics: List<String>,
+        period: String,
+        createdAt: String
+    ): String {
+        val instant = try { Instant.parse(createdAt) } catch (_: Exception) { Instant.now() }
+        val dt = ZonedDateTime.ofInstant(instant, ZoneId.of("Europe/Amsterdam"))
+        val date = "${dt.dayOfMonth} ${dutchMonths[dt.monthValue - 1]} ${dt.year}"
+        val topicSummary = when {
+            customTopics.isNotEmpty() -> {
+                val shown = customTopics.take(2).joinToString(", ")
+                if (customTopics.size > 2) "$shown en meer" else shown
+            }
+            extractedTopics.isNotEmpty() -> {
+                val shown = extractedTopics.take(2).joinToString(", ")
+                if (extractedTopics.size > 2) "$shown en meer" else shown
+            }
+            else -> "nieuws van $period"
+        }
+        return "DevTalk $podcastNumber, $date — $topicSummary"
+    }
     private val log = LoggerFactory.getLogger(PodcastProcessor::class.java)
 
     @Async
     fun process(username: String, podcastId: String) {
+        val startInstant = Instant.now()
         updateStatus(username, podcastId, PodcastStatus.GENERATING_SCRIPT)
         try {
             val podcast = storageService.loadPodcasts(username)
                 .firstOrNull { it.id == podcastId } ?: return
 
-            // Laad nieuws-items van de opgegeven periode
+            // Nieuwsartikelen van de opgegeven periode
             val cutoff = Instant.now().minusSeconds(podcast.periodDays * 24L * 3600)
             val articles = newsService.getAll(username).filter { item ->
                 !item.isSummary && try {
@@ -35,7 +66,7 @@ class PodcastProcessor(
             }
             log.info("Podcast script genereren: {} artikelen ({} dagen) voor {}", articles.size, podcast.periodDays, username)
 
-            // Eerder besproken onderwerpen uit bestaande podcasts
+            // Eerder besproken onderwerpen
             val previousTopics = storageService.loadPodcasts(username)
                 .filter { it.id != podcastId && it.scriptText != null }
                 .flatMap { p ->
@@ -54,11 +85,23 @@ class PodcastProcessor(
                 customTopics = podcast.customTopics
             )
 
-            // Onderwerpen extraheren uit het script
+            // Onderwerpen extraheren en titel bijwerken
             val (topics, topicsCost) = anthropicService.extractPodcastTopics(scriptText)
+            val updatedTitle = buildTitle(
+                podcastNumber = podcast.podcastNumber,
+                customTopics = podcast.customTopics,
+                extractedTopics = topics,
+                period = podcast.periodDescription,
+                createdAt = podcast.createdAt
+            )
 
             updatePodcast(username, podcastId) {
-                it.copy(scriptText = scriptText, topics = topics, status = PodcastStatus.GENERATING_AUDIO)
+                it.copy(
+                    scriptText = scriptText,
+                    topics = topics,
+                    title = updatedTitle,
+                    status = PodcastStatus.GENERATING_AUDIO
+                )
             }
 
             // Audio genereren via gekozen provider
@@ -69,17 +112,20 @@ class PodcastProcessor(
                 TtsProvider.ELEVENLABS -> elevenLabsTtsService.generateAudio(scriptText, audioFile)
                 else -> openAITtsService.generateAudio(scriptText, audioFile)
             }
+
             val totalCost = scriptCost + topicsCost + ttsCost
+            val generationSeconds = (Instant.now().epochSecond - startInstant.epochSecond).toInt()
 
             updatePodcast(username, podcastId) {
                 it.copy(
                     status = PodcastStatus.DONE,
                     audioPath = audioFile.absolutePath,
                     durationSeconds = durationSeconds,
-                    costUsd = totalCost
+                    costUsd = totalCost,
+                    generationSeconds = generationSeconds
                 )
             }
-            log.info("Podcast klaar voor {}: {} sec, \${}", username, durationSeconds, "%.4f".format(totalCost))
+            log.info("Podcast klaar voor {}: audio={}s, generatie={}s, \${}", username, durationSeconds, generationSeconds, "%.4f".format(totalCost))
 
         } catch (e: Exception) {
             log.error("Podcast generatie mislukt voor {} ({}): {}", username, podcastId, e.message)

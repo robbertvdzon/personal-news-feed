@@ -13,22 +13,29 @@ class AudioLoadState {
   final String? podcastTitle;
   final bool isLoading;
   final String? errorMessage;
+  /// Bekende duur uit de podcast-metadata — fallback als de speler het niet detecteert
+  final int? knownDurationSeconds;
 
   const AudioLoadState({
     this.podcastId,
     this.podcastTitle,
     this.isLoading = false,
     this.errorMessage,
+    this.knownDurationSeconds,
   });
 
   bool get hasContent =>
       podcastId != null && !isLoading && errorMessage == null;
 
-  AudioLoadState withLoading(String id, String title) =>
-      AudioLoadState(podcastId: id, podcastTitle: title, isLoading: true);
+  Duration? get knownDuration => knownDurationSeconds != null
+      ? Duration(seconds: knownDurationSeconds!)
+      : null;
 
-  AudioLoadState withReady(String id, String title) =>
-      AudioLoadState(podcastId: id, podcastTitle: title);
+  AudioLoadState withLoading(String id, String title, int? durationSecs) =>
+      AudioLoadState(podcastId: id, podcastTitle: title, isLoading: true, knownDurationSeconds: durationSecs);
+
+  AudioLoadState withReady(String id, String title, int? durationSecs) =>
+      AudioLoadState(podcastId: id, podcastTitle: title, knownDurationSeconds: durationSecs);
 
   AudioLoadState withError(String id, String title, String msg) =>
       AudioLoadState(podcastId: id, podcastTitle: title, errorMessage: msg);
@@ -58,6 +65,8 @@ class AudioPlayerNotifier extends Notifier<AudioLoadState> {
 
   bool isCurrentPodcast(String id) => state.podcastId == id;
 
+  Duration? get knownDuration => state.knownDuration;
+
   // Sla positie op in SharedPreferences
   Future<void> _savePosition(String podcastId, Duration position) async {
     final prefs = await SharedPreferences.getInstance();
@@ -77,7 +86,8 @@ class AudioPlayerNotifier extends Notifier<AudioLoadState> {
     _saveTimer?.cancel();
     _saveTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       final pos = _player.position;
-      final dur = _player.duration;
+      // Gebruik de echte duur of de bekende duur als fallback
+      final dur = _player.duration ?? state.knownDuration;
       // Niet opslaan als bijna aan het einde (zodat hij opnieuw begint)
       if (dur != null && dur.inSeconds > 10 &&
           pos.inSeconds < dur.inSeconds - 10) {
@@ -86,7 +96,7 @@ class AudioPlayerNotifier extends Notifier<AudioLoadState> {
     });
   }
 
-  Future<void> loadAndPlay(String podcastId, String title) async {
+  Future<void> loadAndPlay(String podcastId, String title, {int? durationSeconds}) async {
     // Zelfde podcast al geladen → alleen toggle play/pause
     if (state.podcastId == podcastId &&
         !state.isLoading &&
@@ -96,7 +106,7 @@ class AudioPlayerNotifier extends Notifier<AudioLoadState> {
     }
 
     _saveTimer?.cancel();
-    state = state.withLoading(podcastId, title);
+    state = state.withLoading(podcastId, title, durationSeconds);
     try {
       await _player.stop();
 
@@ -109,7 +119,7 @@ class AudioPlayerNotifier extends Notifier<AudioLoadState> {
         await _player.seek(savedPos);
       }
 
-      state = state.withReady(podcastId, title);
+      state = state.withReady(podcastId, title, durationSeconds);
       _startSaving(podcastId);
       await _player.play();
     } catch (e) {
