@@ -76,7 +76,7 @@ class ElevenLabsTtsService(
                     }
 
                 if (statusCode == 200 && bytes != null && bytes.isNotEmpty()) {
-                    buffer.write(stripId3Tags(bytes))
+                    buffer.write(prepareSegment(bytes, segmentCount + 1))
                     totalChars += text.length
                     segmentCount++
                     log.debug("ElevenLabs segment {}: {} chars, {} bytes, stem={}", segmentCount, text.length, bytes.size, voiceId)
@@ -113,9 +113,23 @@ class ElevenLabsTtsService(
     }
 
     /**
-     * Strippt ID3v2-header (begin) en ID3v1-tag (eind) uit een MP3-byte-array.
-     * ElevenLabs voegt per segment een ID3v2-header toe; bij aaneenschakeling van
-     * segmenten herkent de decoder de tweede header als einde-van-bestand.
+     * Bereidt een MP3-segment voor op aaneenschakeling:
+     * 1. Strip ID3v2 (begin) en ID3v1 (eind)
+     * 2. Strip Xing/Info VBR-header frame
+     *
+     * ElevenLabs voegt per segment zowel een ID3v2-tag als een Xing/Info VBR-frame toe.
+     * Het Xing/Info-frame bevat het totale aantal frames van DIT segment; wanneer meerdere
+     * segmenten aaneengeschakeld worden stopt de speler na het eerste segment omdat hij
+     * denkt dat het bestand dan klaar is.
+     */
+    private fun prepareSegment(bytes: ByteArray, segmentNumber: Int): ByteArray {
+        val noId3 = stripId3Tags(bytes)
+        val noVbr = stripXingFrame(noId3, segmentNumber)
+        return noVbr
+    }
+
+    /**
+     * Strip ID3v2-header (begin) en ID3v1-tag (eind).
      */
     private fun stripId3Tags(bytes: ByteArray): ByteArray {
         var start = 0
@@ -148,5 +162,95 @@ class ElevenLabsTtsService(
 
         return if (start == 0 && end == bytes.size) bytes
         else bytes.copyOfRange(start, end)
+    }
+
+    /**
+     * Zoekt het eerste MPEG-frame en verwijdert het als het een Xing/Info VBR-header bevat.
+     * Dit frame bevat metadata over het aantal frames in DIT segment; zonder verwijdering
+     * stopt de speler na het eerste segment.
+     */
+    private fun stripXingFrame(data: ByteArray, segmentNumber: Int): ByteArray {
+        var i = 0
+        while (i < data.size - 4) {
+            // MPEG sync woord: 0xFF gevolgd door byte met top 3 bits gezet
+            if (data[i].toInt() and 0xFF == 0xFF && data[i + 1].toInt() and 0xE0 == 0xE0) {
+                val frameSize = getMpegFrameSize(data, i)
+                if (frameSize > 0 && i + frameSize <= data.size) {
+                    // Bepaal grootte van side-information (afhankelijk van MPEG-versie en kanalen)
+                    val b1 = data[i + 1].toInt() and 0xFF
+                    val b3 = data[i + 3].toInt() and 0xFF
+                    val mpegVersion = (b1 shr 3) and 0x03   // 3=MPEG1, 2=MPEG2, 0=MPEG2.5
+                    val channelMode = (b3 shr 6) and 0x03   // 3=Mono, anders stereo/joint/dual
+                    val mono = channelMode == 3
+                    val sideInfoSize = when {
+                        mpegVersion == 3 && !mono -> 32  // MPEG1 stereo
+                        mpegVersion == 3 && mono  -> 17  // MPEG1 mono
+                        !mono                     -> 17  // MPEG2/2.5 stereo
+                        else                      -> 9   // MPEG2/2.5 mono
+                    }
+
+                    val tagOffset = i + 4 + sideInfoSize
+                    if (tagOffset + 4 <= data.size) {
+                        val tag = String(data, tagOffset, 4, Charsets.ISO_8859_1)
+                        if (tag == "Xing" || tag == "Info" || tag == "LAME") {
+                            log.debug(
+                                "Segment {}: Xing/Info VBR-frame ('{}') gevonden op offset {}, " +
+                                "framegrootte {} bytes — gestript",
+                                segmentNumber, tag, i, frameSize
+                            )
+                            return data.copyOfRange(i + frameSize, data.size)
+                        }
+                    }
+                    // Eerste frame is geen VBR-header → niets strippen
+                    break
+                }
+            }
+            i++
+        }
+        return data
+    }
+
+    /**
+     * Berekent de grootte (in bytes) van een MPEG Layer III (MP3) frame
+     * op basis van de 4-byte frame-header op [offset].
+     * Geeft -1 terug als het geen geldig MP3-frame is.
+     */
+    private fun getMpegFrameSize(data: ByteArray, offset: Int): Int {
+        if (offset + 4 > data.size) return -1
+
+        val b1 = data[offset + 1].toInt() and 0xFF
+        val b2 = data[offset + 2].toInt() and 0xFF
+
+        val mpegVersion = (b1 shr 3) and 0x03  // 3=MPEG1, 2=MPEG2, 0=MPEG2.5, 1=reserved
+        val layer       = (b1 shr 1) and 0x03  // 1=LayerIII, 2=LayerII, 3=LayerI
+
+        if (mpegVersion == 1) return -1  // reserved
+        if (layer != 1) return -1        // alleen Layer III (MP3)
+
+        val bitrateIdx    = (b2 shr 4) and 0x0F
+        val sampleRateIdx = (b2 shr 2) and 0x03
+        val padding       = (b2 shr 1) and 0x01
+
+        if (bitrateIdx == 0 || bitrateIdx == 15) return -1  // vrij / ongeldig
+        if (sampleRateIdx == 3) return -1                    // gereserveerd
+
+        // Bitrate tabellen voor Layer III (kbps → bps)
+        val bitratesV1 = intArrayOf(0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0)
+        val bitratesV2 = intArrayOf(0, 8,  16, 24, 32, 40, 48, 56, 64,  80,  96,  112, 128, 144, 160, 0)
+        val bitrate = (if (mpegVersion == 3) bitratesV1[bitrateIdx] else bitratesV2[bitrateIdx]) * 1000
+
+        // Sample rate tabellen (Hz)
+        val srV1  = intArrayOf(44100, 48000, 32000)
+        val srV2  = intArrayOf(22050, 24000, 16000)
+        val srV25 = intArrayOf(11025, 12000,  8000)
+        val sampleRate = when (mpegVersion) {
+            3    -> srV1[sampleRateIdx]
+            2    -> srV2[sampleRateIdx]
+            0    -> srV25[sampleRateIdx]
+            else -> return -1
+        }
+
+        // Framegrootte: floor(144 * bitrate / sampleRate) + padding
+        return 144 * bitrate / sampleRate + padding
     }
 }

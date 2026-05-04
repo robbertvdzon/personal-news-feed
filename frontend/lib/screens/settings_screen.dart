@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/appearance_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/news_provider.dart';
 import '../providers/settings_provider.dart';
@@ -30,6 +31,27 @@ class SettingsScreen extends ConsumerWidget {
               trailing: TextButton(
                 onPressed: () => ref.read(authProvider.notifier).logout(),
                 child: const Text('Uitloggen'),
+              ),
+            ),
+          ),
+
+          _SectionHeader('Weergave'),
+          Card(
+            margin: const EdgeInsets.only(bottom: 16),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Lettergrootte',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                  const SizedBox(height: 10),
+                  _FontSizePicker(),
+                ],
               ),
             ),
           ),
@@ -67,6 +89,37 @@ class SettingsScreen extends ConsumerWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Font size picker
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _FontSizePicker extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isLarge = ref.watch(appearanceProvider).fontSizeLarge;
+    final notifier = ref.read(appearanceProvider.notifier);
+    return SegmentedButton<bool>(
+      segments: const [
+        ButtonSegment(
+          value: false,
+          label: Text('Normaal'),
+          icon: Icon(Icons.text_fields, size: 18),
+        ),
+        ButtonSegment(
+          value: true,
+          label: Text('Groot'),
+          icon: Icon(Icons.format_size, size: 20),
+        ),
+      ],
+      selected: {isLarge},
+      onSelectionChanged: (s) => notifier.setFontSizeLarge(s.first),
+      style: ButtonStyle(
+        visualDensity: VisualDensity.compact,
       ),
     );
   }

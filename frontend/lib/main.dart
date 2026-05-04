@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'providers/appearance_provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/request_provider.dart';
 import 'screens/login_screen.dart';
@@ -12,11 +13,12 @@ void main() {
   runApp(const ProviderScope(child: PersonalNewsFeedApp()));
 }
 
-class PersonalNewsFeedApp extends StatelessWidget {
+class PersonalNewsFeedApp extends ConsumerWidget {
   const PersonalNewsFeedApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final appearance = ref.watch(appearanceProvider);
     return MaterialApp(
       title: 'Persoonlijk Nieuwsoverzicht',
       debugShowCheckedModeBanner: false,
@@ -31,6 +33,12 @@ class PersonalNewsFeedApp extends StatelessWidget {
           elevation: 0,
           scrolledUnderElevation: 1,
         ),
+      ),
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          textScaler: TextScaler.linear(appearance.textScale),
+        ),
+        child: child!,
       ),
       home: const _AuthGate(),
     );
