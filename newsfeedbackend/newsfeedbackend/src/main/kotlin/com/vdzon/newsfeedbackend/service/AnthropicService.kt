@@ -48,7 +48,7 @@ class AnthropicService(
             .build()
     }
 
-    // Fase 2: selecteert de beste artikelen op basis van titels + snippets + feedback
+    // Fase 2: selecteert de beste artikelen op basis van titels + snippets + feedback + topic-geschiedenis
     fun selectArticles(
         articles: List<TavilySearchResult>,
         categoryName: String,
@@ -57,7 +57,7 @@ class AnthropicService(
         maxCount: Int,
         likedTitles: List<String> = emptyList(),
         dislikedTitles: List<String> = emptyList(),
-        recentTitles: List<String> = emptyList()
+        topicHistoryContext: String = ""
     ): Pair<List<Int>, Double> {
         if (articles.isEmpty()) return Pair(emptyList(), 0.0)
 
@@ -75,9 +75,8 @@ class AnthropicService(
                     dislikedTitles.take(10).joinToString("\n") { "- \"$it\"" }
         else ""
 
-        val recentPart = if (recentTitles.isNotEmpty())
-            "\n\nAlready in the feed recently (avoid overlapping topics):\n" +
-                    recentTitles.take(20).joinToString("\n") { "- \"$it\"" }
+        val topicHistoryPart = if (topicHistoryContext.isNotBlank())
+            "\n\n$topicHistoryContext"
         else ""
 
         val articleList = articles.mapIndexed { i, a ->
@@ -87,7 +86,7 @@ class AnthropicService(
         val prompt = """
             You are a news curator. Select the $preferredCount to $maxCount most relevant articles for the user.
 
-            Category: $categoryName$instructionsPart$likedPart$dislikedPart$recentPart
+            Category: $categoryName$instructionsPart$likedPart$dislikedPart$topicHistoryPart
 
             Articles to evaluate:
             $articleList
@@ -96,7 +95,7 @@ class AnthropicService(
             - Select between $preferredCount and $maxCount articles
             - Prefer articles that match the user's specific interests and liked examples
             - Avoid articles similar to disliked examples
-            - Avoid articles that overlap in topic with recently shown items
+            - Apply the topic history guidelines above when judging articles on familiar topics
             - Avoid duplicate topics within this selection
             - Return ONLY a JSON object, no explanation:
             {"selected": [1, 3, 5]}
@@ -240,14 +239,13 @@ class AnthropicService(
         articles: List<NewsItem>,
         periodDays: Int,
         durationMinutes: Int,
-        previousTopics: List<String> = emptyList(),
+        topicHistoryContext: String = "",
         customTopics: List<String> = emptyList()
     ): Pair<String, Double> {
         val targetWords = durationMinutes * 140
 
-        val previousTopicsPart = if (previousTopics.isNotEmpty())
-            "\n\nAl eerder besproken onderwerpen (vermijd overlap):\n" +
-                    previousTopics.take(20).joinToString("\n") { "- $it" }
+        val previousTopicsPart = if (topicHistoryContext.isNotBlank())
+            "\n\n$topicHistoryContext"
         else ""
 
         val prompt = if (customTopics.isNotEmpty()) {
@@ -443,6 +441,63 @@ class AnthropicService(
         } catch (e: Exception) {
             log.error("JSON parsen mislukt voor '{}': {}", article.title, e.message)
             Pair(SummarizedArticle(article.title, article.content.take(500), article.url, article.source), cost)
+        }
+    }
+
+    // Extraheert canonieke topics per nieuwsartikel (voor topic-geschiedenis)
+    fun extractNewsTopics(
+        items: List<NewsItem>,
+        existingTopics: List<String> = emptyList()
+    ): Pair<Map<String, List<String>>, Double> {
+        if (items.isEmpty()) return Pair(emptyMap(), 0.0)
+
+        val knownTopicsPart = if (existingTopics.isNotEmpty())
+            "\n\nBekende onderwerpen (hergebruik deze namen als het over hetzelfde gaat):\n" +
+                    existingTopics.take(30).joinToString("\n") { "- $it" }
+        else ""
+
+        val articleList = items.take(20).joinToString("\n\n") { item ->
+            "ID: \"${item.id}\"\nTitel: \"${item.title}\"\nSamenvatting: \"${item.summary.take(250)}\""
+        }
+
+        val prompt = """
+            Analyseer de volgende nieuwsartikelen en extraheer voor elk artikel 2-3 canonieke onderwerpen.
+
+            Regels voor onderwerpnamen:
+            - Specifiek maar herbruikbaar: "Spring AI framework" (niet "Spring AI 1.0 uitgebracht")
+            - Breed genoeg voor meerdere artikelen: "Kubernetes beveiliging" (niet "CVE-2024-12345")
+            - 2-5 woorden, in het Nederlands
+            - Normaliseer: gebruik voor hetzelfde onderwerp altijd dezelfde naam$knownTopicsPart
+
+            Artikelen:
+            $articleList
+
+            Geef ALLEEN een JSON-object terug, geen uitleg:
+            {
+              "id1": ["Onderwerp A", "Onderwerp B"],
+              "id2": ["Onderwerp C"]
+            }
+        """.trimIndent()
+
+        val (text, cost) = callWithRetry(prompt, summaryModel)
+        return try {
+            val start = text.indexOf('{')
+            val end = text.lastIndexOf('}')
+            val json = if (start != -1 && end != -1) text.substring(start, end + 1) else "{}"
+            @Suppress("UNCHECKED_CAST")
+            val raw = objectMapper.readValue(json, Map::class.java) as Map<*, *>
+            val result = mutableMapOf<String, List<String>>()
+            raw.forEach { (key, value) ->
+                if (key is String && value is List<*>) {
+                    val topics = value.filterIsInstance<String>().filter { it.isNotBlank() }
+                    if (topics.isNotEmpty()) result[key] = topics
+                }
+            }
+            log.info("News topics geëxtraheerd: {} artikelen", result.size)
+            Pair(result, cost)
+        } catch (e: Exception) {
+            log.error("News topics parsen mislukt: {}", e.message)
+            Pair(emptyMap(), cost)
         }
     }
 

@@ -11,5 +11,7 @@ data class NewsItem(
     val isRead: Boolean = false,
     val starred: Boolean = false,
     val liked: Boolean? = null,   // null = geen feedback, true = geliked, false = gedisliked
-    val isSummary: Boolean = false
+    val isSummary: Boolean = false,
+    /** Canonieke onderwerpen geëxtraheerd door Claude — gebruikt voor topic-geschiedenis */
+    val topics: List<String> = emptyList()
 )

@@ -17,7 +17,8 @@ data class DailyFetchResult(
 data class FeedbackContext(
     val likedTitles: List<String> = emptyList(),
     val dislikedTitles: List<String> = emptyList(),
-    val recentTitles: List<String> = emptyList()
+    /** Geformatteerde topic-geschiedenis voor de selectie-prompt */
+    val topicHistoryContext: String = ""
 )
 
 private val SYSTEM_CATEGORY_IDS = setOf("overig")
@@ -139,7 +140,7 @@ class RealNewsSourceService(
             return Pair(emptyList(), 0.0)
         }
 
-        // Stap 3: Claude selecteert de meest relevante artikelen (met feedback + deduplicatie)
+        // Stap 3: Claude selecteert de meest relevante artikelen (met feedback + topic-geschiedenis)
         val (selectedIndices, selectionCost) = anthropicService.selectArticles(
             articles = searchResults,
             categoryName = subject,
@@ -148,7 +149,7 @@ class RealNewsSourceService(
             maxCount = maxCount,
             likedTitles = feedback.likedTitles,
             dislikedTitles = feedback.dislikedTitles,
-            recentTitles = feedback.recentTitles
+            topicHistoryContext = feedback.topicHistoryContext
         )
         totalCost += selectionCost
 

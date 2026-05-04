@@ -20,11 +20,10 @@ class RequestProcessor(
     private fun loadFeedback(username: String): FeedbackContext {
         val liked = newsService.getLikedItems(username).map { it.title }
         val disliked = newsService.getDislikedItems(username).map { it.title }
-        val recent = newsService.getRecentItems(username, days = 3).map { it.title }
         if (liked.isNotEmpty() || disliked.isNotEmpty()) {
-            log.info("Feedback context: {} geliked, {} gedisliked, {} recent", liked.size, disliked.size, recent.size)
+            log.info("Feedback context: {} geliked, {} gedisliked", liked.size, disliked.size)
         }
-        return FeedbackContext(likedTitles = liked, dislikedTitles = disliked, recentTitles = recent)
+        return FeedbackContext(likedTitles = liked, dislikedTitles = disliked)
     }
     private val log = LoggerFactory.getLogger(RequestProcessor::class.java)
 

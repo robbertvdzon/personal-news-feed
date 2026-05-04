@@ -17,7 +17,8 @@ class PodcastProcessor(
     private val newsService: NewsService,
     private val anthropicService: AnthropicService,
     private val openAITtsService: OpenAITtsService,
-    private val elevenLabsTtsService: ElevenLabsTtsService
+    private val elevenLabsTtsService: ElevenLabsTtsService,
+    private val topicHistoryService: TopicHistoryService
 ) {
     private val dutchMonths = arrayOf(
         "januari","februari","maart","april","mei","juni",
@@ -66,22 +67,14 @@ class PodcastProcessor(
             }
             log.info("Podcast script genereren: {} artikelen ({} dagen) voor {}", articles.size, podcast.periodDays, username)
 
-            // Eerder besproken onderwerpen
-            val previousTopics = storageService.loadPodcasts(username)
-                .filter { it.id != podcastId && it.scriptText != null }
-                .flatMap { p ->
-                    p.scriptText!!.lines()
-                        .filter { it.startsWith("INTERVIEWER:") || it.startsWith("GAST:") }
-                        .take(3)
-                        .map { it.substringAfter(":").trim().take(80) }
-                }
-                .take(20)
+            // Topic-geschiedenis ophalen voor betere onderwerpkeuze
+            val topicHistoryContext = topicHistoryService.buildPodcastContext(username)
 
             val (scriptText, scriptCost) = anthropicService.generatePodcastScript(
                 articles = articles,
                 periodDays = podcast.periodDays,
                 durationMinutes = podcast.durationMinutes,
-                previousTopics = previousTopics,
+                topicHistoryContext = topicHistoryContext,
                 customTopics = podcast.customTopics
             )
 
@@ -94,6 +87,10 @@ class PodcastProcessor(
                 period = podcast.periodDescription,
                 createdAt = podcast.createdAt
             )
+
+            // Werk topic-geschiedenis bij: eerste helft = diepgaand behandeld
+            val deepTopics = topics.take((topics.size + 1) / 2)
+            topicHistoryService.mergePodcastTopics(username, topics, deepTopics)
 
             updatePodcast(username, podcastId) {
                 it.copy(

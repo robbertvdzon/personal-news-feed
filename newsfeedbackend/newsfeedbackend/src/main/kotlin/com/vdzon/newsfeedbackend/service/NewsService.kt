@@ -9,7 +9,8 @@ class NewsService(
     private val storageService: StorageService,
     private val settingsService: SettingsService,
     private val realNewsSourceService: RealNewsSourceService,
-    private val mockNewsService: MockNewsService
+    private val mockNewsService: MockNewsService,
+    private val topicHistoryService: TopicHistoryService
 ) {
     private val log = LoggerFactory.getLogger(NewsService::class.java)
 
@@ -49,8 +50,11 @@ class NewsService(
         val items = storageService.loadNews(username).toMutableList()
         val index = items.indexOfFirst { it.id == id }
         if (index == -1) return
-        items[index] = items[index].copy(liked = liked)
+        val item = items[index]
+        items[index] = item.copy(liked = liked)
         storageService.saveNews(username, items)
+        // Werk topic-geschiedenis bij als de gebruiker een like geeft
+        topicHistoryService.onFeedback(username, item, liked)
     }
 
     fun getLikedItems(username: String): List<NewsItem> =
@@ -90,18 +94,30 @@ class NewsService(
         val items = storageService.loadNews(username).toMutableList()
         val index = items.indexOfFirst { it.id == id }
         if (index == -1) return
-        items[index] = items[index].copy(starred = !items[index].starred)
+        val item = items[index]
+        val nowStarred = !item.starred
+        items[index] = item.copy(starred = nowStarred)
         storageService.saveNews(username, items)
+        // Werk topic-geschiedenis bij
+        topicHistoryService.onStarred(username, item, nowStarred)
     }
 
     fun refresh(username: String) {
         log.info("Nieuws verversen voor gebruiker: {}", username)
         val categories = settingsService.getSettings(username)
         try {
-            val fetchResult = realNewsSourceService.fetchDailyNews(categories)
+            // Bouw feedback context met volledige topic-geschiedenis
+            val feedback = FeedbackContext(
+                likedTitles = getLikedItems(username).map { it.title }.take(10),
+                dislikedTitles = getDislikedItems(username).map { it.title }.take(10),
+                topicHistoryContext = topicHistoryService.buildNewsContext(username)
+            )
+            val fetchResult = realNewsSourceService.fetchDailyNews(categories, feedback)
             if (fetchResult.items.isNotEmpty()) {
-                storageService.saveNews(username, fetchResult.items)
-                log.info("{} nieuwsartikelen opgeslagen voor {}", fetchResult.items.size, username)
+                // Extraheer topics per artikel en werk de topic-geschiedenis bij
+                val itemsWithTopics = topicHistoryService.extractAndUpdateFromNewsItems(username, fetchResult.items)
+                storageService.saveNews(username, itemsWithTopics)
+                log.info("{} nieuwsartikelen opgeslagen voor {} (met topics)", itemsWithTopics.size, username)
             } else {
                 log.warn("Geen artikelen via web search, gebruik mock voor {}", username)
                 storageService.saveNews(username, mockNewsService.fetchDailyNews())
