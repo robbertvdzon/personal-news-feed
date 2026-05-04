@@ -208,6 +208,19 @@ final newsLoadingProvider = Provider<bool>((ref) {
   return ref.watch(newsProvider).isLoading;
 });
 
+// Aantal ongelezen items per categorie-ID (voor badges op de tabs)
+final unreadCountByCategoryProvider = Provider<Map<String, int>>((ref) {
+  final items = ref.watch(newsProvider).valueOrNull ?? [];
+  final readItems = ref.watch(readItemsProvider);
+  final counts = <String, int>{};
+  for (final item in items) {
+    if (!item.isSummary && !readItems.contains(item.id) && !item.isRead) {
+      counts[item.category] = (counts[item.category] ?? 0) + 1;
+    }
+  }
+  return counts;
+});
+
 // Aantal gelezen items in de huidige filtercombinatie
 final readCountProvider = Provider<int>((ref) {
   final items = ref.watch(newsProvider).valueOrNull ?? [];

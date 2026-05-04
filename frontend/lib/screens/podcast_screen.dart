@@ -1036,7 +1036,7 @@ class _CreatePodcastDialog extends StatefulWidget {
 class _CreatePodcastDialogState extends State<_CreatePodcastDialog> {
   int _periodDays = 7;
   bool _loading = false;
-  TtsProvider _ttsProvider = TtsProvider.elevenlabs;
+  TtsProvider _ttsProvider = TtsProvider.openai;
 
   final _durationController = TextEditingController(text: '10');
   final _topicsController = TextEditingController();

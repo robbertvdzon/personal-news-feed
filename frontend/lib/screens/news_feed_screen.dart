@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/news_provider.dart';
 import '../providers/settings_provider.dart';
+// unreadCountByCategoryProvider is exported via news_provider.dart
 import '../widgets/app_logo.dart';
 import '../widgets/news_card.dart';
 
@@ -120,6 +121,9 @@ class _CategoryTabBar extends ConsumerWidget {
     final selected = ref.watch(selectedCategoryProvider);
     final showStarred = ref.watch(showStarredProvider);
     final starredItems = ref.watch(starredItemsProvider);
+    final unreadByCategory = ref.watch(unreadCountByCategoryProvider);
+
+    final totalUnread = unreadByCategory.values.fold(0, (a, b) => a + b);
 
     void selectCategory(String? catId) {
       ref.read(showStarredProvider.notifier).state = false;
@@ -135,6 +139,7 @@ class _CategoryTabBar extends ConsumerWidget {
           _TabChip(
             label: 'Alles',
             selected: !showStarred && selected == null,
+            unreadCount: totalUnread,
             onTap: () => selectCategory(null),
           ),
           ...enabledCategories.map((cat) => Padding(
@@ -142,6 +147,7 @@ class _CategoryTabBar extends ConsumerWidget {
                 child: _TabChip(
                   label: cat.name,
                   selected: !showStarred && selected == cat.id,
+                  unreadCount: unreadByCategory[cat.id] ?? 0,
                   onTap: () => selectCategory(
                       selected == cat.id && !showStarred ? null : cat.id),
                 ),
@@ -169,12 +175,14 @@ class _CategoryTabBar extends ConsumerWidget {
 class _TabChip extends StatelessWidget {
   final String label;
   final bool selected;
+  final int unreadCount;
   final VoidCallback onTap;
 
   const _TabChip({
     required this.label,
     required this.selected,
     required this.onTap,
+    this.unreadCount = 0,
   });
 
   @override
@@ -189,13 +197,38 @@ class _TabChip extends StatelessWidget {
           color: selected ? color : Colors.grey[100],
           borderRadius: BorderRadius.circular(20),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: selected ? Colors.white : Colors.grey[700],
-            fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-            fontSize: 13,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                color: selected ? Colors.white : Colors.grey[700],
+                fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                fontSize: 13,
+              ),
+            ),
+            if (unreadCount > 0) ...[
+              const SizedBox(width: 5),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(
+                  color: selected
+                      ? Colors.white.withValues(alpha: 0.30)
+                      : color.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '$unreadCount',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: selected ? Colors.white : color,
+                  ),
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );
