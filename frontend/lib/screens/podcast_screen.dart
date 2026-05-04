@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
@@ -356,12 +355,7 @@ class _PodcastCard extends ConsumerWidget {
   Future<void> _downloadAudio(String podcastId) async {
     final url = ApiService.podcastAudioUrl(podcastId);
     final uri = Uri.parse(url);
-    if (kIsWeb) {
-      // Op web: open de URL in een nieuw tabblad — de browser downloadt automatisch
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
-      await launchUrl(uri);
-    }
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   void _showScript(BuildContext context, String podcastId) {

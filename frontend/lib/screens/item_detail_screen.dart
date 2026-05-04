@@ -173,13 +173,16 @@ class _ArticlePage extends ConsumerWidget {
   }
 
   Future<void> _openUrl(BuildContext context) async {
+    if (item.url.isEmpty) return;
     final uri = Uri.parse(item.url);
-    if (await canLaunchUrl(uri)) {
+    try {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Kan de link niet openen')),
-      );
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Kan de link niet openen')),
+        );
+      }
     }
   }
 
