@@ -57,6 +57,8 @@ class PodcastController(private val podcastService: PodcastService) {
         return ResponseEntity.ok()
             .contentType(MediaType.parseMediaType("audio/mpeg"))
             .contentLength(file.length())
+            .header("Accept-Ranges", "bytes")
+            .header("Cache-Control", "no-cache")
             .body(FileSystemResource(file))
     }
 

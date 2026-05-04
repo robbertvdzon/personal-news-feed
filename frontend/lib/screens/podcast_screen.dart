@@ -404,6 +404,12 @@ class _MiniPlayer extends ConsumerWidget {
     return '$m:$s';
   }
 
+  void _skip(AudioPlayerNotifier notifier, AudioPlayer player, int seconds) {
+    final dur = player.duration ?? Duration.zero;
+    final next = player.position + Duration(seconds: seconds);
+    notifier.seek(next.isNegative ? Duration.zero : (next > dur ? dur : next));
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final audioState = ref.watch(audioPlayerProvider);
@@ -522,38 +528,53 @@ class _MiniPlayer extends ConsumerWidget {
               final isBuffering = audioState.isLoading ||
                   processing == ProcessingState.loading ||
                   processing == ProcessingState.buffering;
+              final enabled = audioState.hasContent;
 
               return Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.replay_10),
-                    onPressed: audioState.hasContent
-                        ? () => notifier
-                            .seek(player.position - const Duration(seconds: 10))
-                        : null,
+                  // ← 60s
+                  _SkipButton(
+                    seconds: -60,
+                    enabled: enabled,
+                    onTap: () => _skip(notifier, player, -60),
                   ),
+                  // ← 30s
+                  _SkipButton(
+                    seconds: -30,
+                    enabled: enabled,
+                    onTap: () => _skip(notifier, player, -30),
+                  ),
+                  // ← 15s
+                  _SkipButton(
+                    seconds: -15,
+                    enabled: enabled,
+                    onTap: () => _skip(notifier, player, -15),
+                  ),
+                  // Play / pause
                   if (isBuffering)
                     const SizedBox(
-                      width: 44,
-                      height: 44,
+                      width: 48,
+                      height: 48,
                       child: Padding(
-                        padding: EdgeInsets.all(10),
+                        padding: EdgeInsets.all(11),
                         child: CircularProgressIndicator(strokeWidth: 2),
                       ),
                     )
                   else
                     IconButton(
-                      iconSize: 44,
+                      iconSize: 48,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
                       icon: Icon(
                         isPlaying
                             ? Icons.pause_circle_filled
                             : Icons.play_circle_filled,
                         color: Theme.of(context).colorScheme.primary,
                       ),
-                      onPressed: audioState.hasContent
+                      onPressed: enabled
                           ? () async {
-                              if (processing == ProcessingState.completed) {
+                              if (processing ==
+                                  ProcessingState.completed) {
                                 await notifier.seek(Duration.zero);
                                 await player.play();
                               } else {
@@ -562,16 +583,23 @@ class _MiniPlayer extends ConsumerWidget {
                             }
                           : null,
                     ),
-                  IconButton(
-                    icon: const Icon(Icons.forward_30),
-                    onPressed: audioState.hasContent
-                        ? () {
-                            final next = player.position +
-                                const Duration(seconds: 30);
-                            final dur = player.duration ?? Duration.zero;
-                            notifier.seek(next > dur ? dur : next);
-                          }
-                        : null,
+                  // +15s
+                  _SkipButton(
+                    seconds: 15,
+                    enabled: enabled,
+                    onTap: () => _skip(notifier, player, 15),
+                  ),
+                  // +30s
+                  _SkipButton(
+                    seconds: 30,
+                    enabled: enabled,
+                    onTap: () => _skip(notifier, player, 30),
+                  ),
+                  // +60s
+                  _SkipButton(
+                    seconds: 60,
+                    enabled: enabled,
+                    onTap: () => _skip(notifier, player, 60),
                   ),
                 ],
               );
@@ -1004,6 +1032,54 @@ class _CreatePodcastDialogState extends State<_CreatePodcastDialog> {
           label: const Text('Genereren'),
         ),
       ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Skip-knop (±15s / ±30s / ±60s)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _SkipButton extends StatelessWidget {
+  final int seconds; // negatief = terug, positief = vooruit
+  final bool enabled;
+  final VoidCallback onTap;
+
+  const _SkipButton({
+    required this.seconds,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isBack = seconds < 0;
+    final label = '${seconds.abs()}s';
+    final color = enabled ? Colors.grey[700]! : Colors.grey[400]!;
+
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isBack ? Icons.replay : Icons.forward,
+              size: 18,
+              color: color,
+            ),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 10,
+                color: color,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
