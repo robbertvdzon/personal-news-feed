@@ -70,12 +70,14 @@ class QueueScreen extends ConsumerWidget {
           required int preferredCount,
           required int maxCount,
           required String extraInstructions,
+          required int maxAgeDays,
         }) {
           ref.read(requestProvider.notifier).addRequest(
                 subject: subject,
                 preferredCount: preferredCount,
                 maxCount: maxCount,
                 extraInstructions: extraInstructions,
+                maxAgeDays: maxAgeDays,
               );
         },
       ),
@@ -695,6 +697,7 @@ class _AddRequestDialog extends StatefulWidget {
     required int preferredCount,
     required int maxCount,
     required String extraInstructions,
+    required int maxAgeDays,
   }) onSubmit;
 
   const _AddRequestDialog({required this.onSubmit, this.prefill});
@@ -709,6 +712,14 @@ class _AddRequestDialogState extends State<_AddRequestDialog> {
   late final TextEditingController _extraController;
   late int _preferredCount;
   late int _maxCount;
+  late int _maxAgeDays;
+
+  static const _ageOptions = [
+    (label: 'Vandaag', days: 1),
+    (label: '3 dagen', days: 3),
+    (label: '1 week', days: 7),
+    (label: '1 maand', days: 30),
+  ];
 
   @override
   void initState() {
@@ -717,6 +728,7 @@ class _AddRequestDialogState extends State<_AddRequestDialog> {
     _extraController = TextEditingController(text: widget.prefill?.extraInstructions ?? '');
     _preferredCount = widget.prefill?.preferredCount ?? 3;
     _maxCount = widget.prefill?.maxCount ?? 5;
+    _maxAgeDays = widget.prefill?.maxAgeDays ?? 3;
   }
 
   @override
@@ -733,6 +745,7 @@ class _AddRequestDialogState extends State<_AddRequestDialog> {
         preferredCount: _preferredCount,
         maxCount: _maxCount,
         extraInstructions: _extraController.text.trim(),
+        maxAgeDays: _maxAgeDays,
       );
       Navigator.of(context).pop();
     }
@@ -770,7 +783,25 @@ class _AddRequestDialogState extends State<_AddRequestDialog> {
                 ),
                 maxLines: 2,
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Tijdsrange artikelen',
+                    style: Theme.of(context).textTheme.bodySmall),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                children: _ageOptions.map((opt) {
+                  final selected = _maxAgeDays == opt.days;
+                  return ChoiceChip(
+                    label: Text(opt.label),
+                    selected: selected,
+                    onSelected: (_) => setState(() => _maxAgeDays = opt.days),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 8),
               Row(
                 children: [
                   Expanded(

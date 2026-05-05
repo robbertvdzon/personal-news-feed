@@ -19,11 +19,18 @@ class NewsCard extends ConsumerWidget {
     required this.index,
   });
 
-  String _formatTime(DateTime dt) {
+  /// Wanneer het item aan de feed werd toegevoegd (relatief als recent, anders datum)
+  String _formatFeedTime(DateTime dt) {
     final diff = DateTime.now().difference(dt);
-    if (diff.inMinutes < 60) return '${diff.inMinutes} min geleden';
-    if (diff.inHours < 24) return '${diff.inHours} uur geleden';
-    return '${diff.inDays} dag${diff.inDays == 1 ? '' : 'en'} geleden';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m geleden';
+    if (diff.inHours < 24) return '${diff.inHours}u geleden';
+    return '${dt.day}-${dt.month}-${dt.year}';
+  }
+
+  /// Publicatiedatum van het artikel zelf (altijd een datum, nooit relatief)
+  String _formatArticlePubDate(DateTime? pubDate) {
+    if (pubDate == null) return 'onbekend';
+    return '${pubDate.day}-${pubDate.month}-${pubDate.year}';
   }
 
   @override
@@ -104,12 +111,23 @@ class NewsCard extends ConsumerWidget {
                           categoryName: category.name,
                         ),
                         const Spacer(),
-                        Text(
-                          _formatTime(item.timestamp),
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              _formatFeedTime(item.timestamp),
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                     color: Colors.grey[500],
                                   ),
+                            ),
+                            Text(
+                              'art: ${_formatArticlePubDate(item.publishedDate)}',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: Colors.grey[400],
+                                    fontSize: 10,
+                                  ),
+                            ),
+                          ],
                         ),
                       ],
                     ),

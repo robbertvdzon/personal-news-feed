@@ -166,10 +166,16 @@ class _ArticlePage extends ConsumerWidget {
 
   const _ArticlePage({required this.item});
 
-  String _formatDateTime(DateTime dt) {
-    return '${dt.day}-${dt.month}-${dt.year} '
-        '${dt.hour.toString().padLeft(2, '0')}:'
-        '${dt.minute.toString().padLeft(2, '0')}';
+  String _formatFeedTime(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 60) return '${diff.inMinutes} min geleden';
+    if (diff.inHours < 24) return '${diff.inHours} uur geleden';
+    return '${dt.day}-${dt.month}-${dt.year}';
+  }
+
+  String _formatPubDate(DateTime? pubDate) {
+    if (pubDate == null) return 'onbekend';
+    return '${pubDate.day}-${pubDate.month}-${pubDate.year}';
   }
 
   Future<void> _openUrl(BuildContext context) async {
@@ -216,10 +222,19 @@ class _ArticlePage extends ConsumerWidget {
           const SizedBox(height: 8),
           Row(
             children: [
-              Icon(Icons.access_time, size: 14, color: Colors.grey[400]),
+              Icon(Icons.add_circle_outline, size: 14, color: Colors.grey[400]),
               const SizedBox(width: 4),
               Text(
-                _formatDateTime(item.timestamp),
+                _formatFeedTime(item.timestamp),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.grey[500],
+                    ),
+              ),
+              const SizedBox(width: 12),
+              Icon(Icons.newspaper_outlined, size: 14, color: Colors.grey[400]),
+              const SizedBox(width: 4),
+              Text(
+                _formatPubDate(item.publishedDate),
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: Colors.grey[500],
                     ),

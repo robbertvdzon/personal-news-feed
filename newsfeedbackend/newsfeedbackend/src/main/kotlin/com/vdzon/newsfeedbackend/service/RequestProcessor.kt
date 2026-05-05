@@ -37,6 +37,7 @@ class RequestProcessor(
                 subject = request.subject,
                 preferredCount = request.preferredCount,
                 extraInstructions = request.extraInstructions,
+                maxAgeDays = request.maxAgeDays,
                 categories = categories,
                 feedback = feedback,
                 onArticle = { item ->

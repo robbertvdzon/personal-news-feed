@@ -6,5 +6,6 @@ data class CreateRequestDto(
     val sourceItemTitle: String? = null,
     val preferredCount: Int = 2,
     val maxCount: Int = 5,
-    val extraInstructions: String = ""
+    val extraInstructions: String = "",
+    val maxAgeDays: Int = 3
 )

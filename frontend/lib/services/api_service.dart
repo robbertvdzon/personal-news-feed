@@ -224,6 +224,7 @@ class ApiService {
     int preferredCount = 2,
     int maxCount = 5,
     String extraInstructions = '',
+    int maxAgeDays = 3,
   }) async {
     final body = jsonEncode({
       'subject': subject,
@@ -232,6 +233,7 @@ class ApiService {
       'preferredCount': preferredCount,
       'maxCount': maxCount,
       if (extraInstructions.isNotEmpty) 'extraInstructions': extraInstructions,
+      'maxAgeDays': maxAgeDays,
     });
     final response = await _client.post(
       Uri.parse('${AppConfig.apiBaseUrl}/api/requests'),

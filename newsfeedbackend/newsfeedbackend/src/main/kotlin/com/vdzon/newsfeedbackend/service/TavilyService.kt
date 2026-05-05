@@ -11,7 +11,8 @@ data class TavilySearchResult(
     val title: String,
     val url: String,
     val source: String,
-    val snippet: String   // kort stukje tekst van de zoekresultaten (geen volledig artikel)
+    val snippet: String,   // kort stukje tekst van de zoekresultaten (geen volledig artikel)
+    val publishedDate: String? = null  // publicatiedatum van het artikel (bijv. "2025-05-04")
 )
 
 data class TavilyArticle(
@@ -74,13 +75,15 @@ class TavilyService(
                 val url = r.path("url").asText()
                 val title = r.path("title").asText()
                 val snippet = r.path("content").asText("")
+                val publishedDate = r.path("published_date").asText("").takeIf { it.isNotBlank() }
 
                 if (title.isNotBlank()) {
                     articles.add(TavilySearchResult(
                         title = title,
                         url = url,
                         source = extractDomain(url),
-                        snippet = snippet.take(500)
+                        snippet = snippet.take(500),
+                        publishedDate = publishedDate
                     ))
                 }
             }

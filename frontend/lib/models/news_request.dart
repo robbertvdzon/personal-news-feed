@@ -10,6 +10,7 @@ class NewsRequest {
   final int preferredCount;
   final int maxCount;
   final String extraInstructions;
+  final int maxAgeDays;
   final RequestStatus status;
   final DateTime createdAt;
   final DateTime? completedAt;
@@ -28,6 +29,7 @@ class NewsRequest {
     this.preferredCount = 2,
     this.maxCount = 5,
     this.extraInstructions = '',
+    this.maxAgeDays = 3,
     this.status = RequestStatus.pending,
     required this.createdAt,
     this.completedAt,
@@ -48,6 +50,7 @@ class NewsRequest {
       preferredCount: json['preferredCount'] as int? ?? 2,
       maxCount: json['maxCount'] as int? ?? 5,
       extraInstructions: json['extraInstructions'] as String? ?? '',
+      maxAgeDays: json['maxAgeDays'] as int? ?? 3,
       status: RequestStatus.values.byName(
         (json['status'] as String).toLowerCase(),
       ),
@@ -76,6 +79,7 @@ class NewsRequest {
         'preferredCount': preferredCount,
         'maxCount': maxCount,
         if (extraInstructions.isNotEmpty) 'extraInstructions': extraInstructions,
+        'maxAgeDays': maxAgeDays,
       };
 
   NewsRequest copyWith({
@@ -96,6 +100,7 @@ class NewsRequest {
       preferredCount: preferredCount,
       maxCount: maxCount,
       extraInstructions: extraInstructions,
+      maxAgeDays: maxAgeDays,
       status: status ?? this.status,
       createdAt: createdAt,
       completedAt: clearCompletedAt ? null : (completedAt ?? this.completedAt),

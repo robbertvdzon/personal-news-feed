@@ -51,6 +51,7 @@ class RealNewsSourceService(
                 categoryId = cat.id,
                 websites = cat.websites,
                 feedback = feedback,
+                searchDays = 1,
                 onArticle = onArticle
             )
             allItems.addAll(items)
@@ -81,6 +82,7 @@ class RealNewsSourceService(
         subject: String,
         preferredCount: Int,
         extraInstructions: String = "",
+        maxAgeDays: Int = 3,
         categories: List<CategorySettings>,
         feedback: FeedbackContext = FeedbackContext(),
         onArticle: (NewsItem) -> Unit = {}
@@ -95,6 +97,7 @@ class RealNewsSourceService(
             categoryId = categoryId,
             websites = categoryWebsites,
             feedback = feedback,
+            searchDays = maxAgeDays,
             onArticle = onArticle
         )
         log.info("Onderwerp '{}': {} artikelen, kosten \${}", subject, items.size, "%.5f".format(cost))
@@ -111,6 +114,7 @@ class RealNewsSourceService(
         categoryId: String,
         websites: List<String> = emptyList(),
         feedback: FeedbackContext,
+        searchDays: Int = 2,
         onArticle: (NewsItem) -> Unit
     ): Pair<List<NewsItem>, Double> {
         var totalCost = 0.0
@@ -126,13 +130,13 @@ class RealNewsSourceService(
 
         // Stap 2: Tavily zoekt in gecureerde websites (met fallback naar breed zoeken)
         var searchResults = if (websites.isNotEmpty()) {
-            val results = tavilyService.search(query = query, maxResults = SEARCH_POOL_SIZE, includeDomains = websites)
+            val results = tavilyService.search(query = query, maxResults = SEARCH_POOL_SIZE, days = searchDays, includeDomains = websites)
             if (results.isEmpty()) {
                 log.warn("Geen resultaten binnen gecureerde websites voor '{}', terugvallen op breed zoeken", subject)
-                tavilyService.search(query = query, maxResults = SEARCH_POOL_SIZE)
+                tavilyService.search(query = query, maxResults = SEARCH_POOL_SIZE, days = searchDays)
             } else results
         } else {
-            tavilyService.search(query = query, maxResults = SEARCH_POOL_SIZE)
+            tavilyService.search(query = query, maxResults = SEARCH_POOL_SIZE, days = searchDays)
         }
 
         if (searchResults.isEmpty()) {
@@ -162,6 +166,12 @@ class RealNewsSourceService(
         val selectedResults = selectedIndices.map { searchResults[it] }
         val extractedContent = tavilyService.extractContent(selectedResults.map { it.url })
 
+        // Sla publicatiedatums op per URL voor later gebruik
+        // Gebruik Tavily-datum als beschikbaar, anders probeer datum uit de URL te halen
+        val publishedDateByUrl = selectedResults.associate { result ->
+            result.url to (result.publishedDate ?: extractDateFromUrl(result.url))
+        }.filterValues { it != null }.mapValues { it.value!! }
+
         // Maak TavilyArticle objecten met volledige tekst (of snippet als fallback)
         val articles = selectedResults.map { result ->
             TavilyArticle(
@@ -179,7 +189,7 @@ class RealNewsSourceService(
         articles.forEach { article ->
             log.info("Samenvatting voor '{}' ({})", article.title.take(40), subject)
             val (summarized, cost) = anthropicService.summarizeArticle(article, subject)
-            val item = summarized.toNewsItem(categoryId, now)
+            val item = summarized.toNewsItem(categoryId, now, publishedDateByUrl[article.url])
             onArticle(item)
             newsItems.add(item)
             totalCost += cost
@@ -195,13 +205,35 @@ class RealNewsSourceService(
         }?.id ?: "overig"
     }
 
-    private fun SummarizedArticle.toNewsItem(category: String, timestamp: String) = NewsItem(
+    /** Probeert een datum te herkennen in de URL, bijv. /2025/01/21/ of /2025-01-21 */
+    private fun extractDateFromUrl(url: String): String? {
+        // Patroon: /yyyy/mm/dd/ of /yyyy-mm-dd of ?date=yyyy-mm-dd
+        val patterns = listOf(
+            Regex("""[/\-](\d{4})[/\-](\d{1,2})[/\-](\d{1,2})[/\-?#]"""),
+            Regex("""[/\-](\d{4})[/\-](\d{1,2})[/\-](\d{1,2})$""")
+        )
+        for (pattern in patterns) {
+            val match = pattern.find(url) ?: continue
+            val (year, month, day) = match.destructured
+            val y = year.toIntOrNull() ?: continue
+            val m = month.toIntOrNull() ?: continue
+            val d = day.toIntOrNull() ?: continue
+            // Sanity check: jaar 2010-2030, maand 1-12, dag 1-31
+            if (y in 2010..2030 && m in 1..12 && d in 1..31) {
+                return "$year-${month.padStart(2, '0')}-${day.padStart(2, '0')}"
+            }
+        }
+        return null
+    }
+
+    private fun SummarizedArticle.toNewsItem(category: String, timestamp: String, publishedDate: String? = null) = NewsItem(
         id = UUID.randomUUID().toString(),
         title = title,
         summary = summary,
         url = url,
         category = category,
         timestamp = timestamp,
-        source = source
+        source = source,
+        publishedDate = publishedDate
     )
 }

@@ -82,6 +82,7 @@ class RequestNotifier extends AsyncNotifier<List<NewsRequest>> {
     int preferredCount = 2,
     int maxCount = 5,
     String extraInstructions = '',
+    int maxAgeDays = 3,
   }) async {
     // Optimistisch toevoegen zodat het meteen zichtbaar is
     final tempId = 'temp-${DateTime.now().millisecondsSinceEpoch}';
@@ -93,6 +94,7 @@ class RequestNotifier extends AsyncNotifier<List<NewsRequest>> {
       preferredCount: preferredCount,
       maxCount: maxCount,
       extraInstructions: extraInstructions,
+      maxAgeDays: maxAgeDays,
       status: RequestStatus.pending,
       createdAt: DateTime.now(),
     );
@@ -107,6 +109,7 @@ class RequestNotifier extends AsyncNotifier<List<NewsRequest>> {
         preferredCount: preferredCount,
         maxCount: maxCount,
         extraInstructions: extraInstructions,
+        maxAgeDays: maxAgeDays,
       );
       final updated = state.valueOrNull ?? [];
       state = AsyncData(updated.map((r) => r.id == tempId ? newRequest : r).toList());

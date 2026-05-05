@@ -33,6 +33,7 @@ class RequestService(
             preferredCount = dto.preferredCount,
             maxCount = dto.maxCount,
             extraInstructions = dto.extraInstructions,
+            maxAgeDays = dto.maxAgeDays,
             status = RequestStatus.PENDING,
             createdAt = Instant.now().toString()
         )
