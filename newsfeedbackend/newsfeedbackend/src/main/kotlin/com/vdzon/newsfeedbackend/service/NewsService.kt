@@ -106,18 +106,32 @@ class NewsService(
         log.info("Nieuws verversen voor gebruiker: {}", username)
         val categories = settingsService.getSettings(username)
         try {
-            // Bouw feedback context met volledige topic-geschiedenis
             val feedback = FeedbackContext(
                 likedTitles = getLikedItems(username).map { it.title }.take(10),
                 dislikedTitles = getDislikedItems(username).map { it.title }.take(10),
                 topicHistoryContext = topicHistoryService.buildNewsContext(username)
             )
-            val fetchResult = realNewsSourceService.fetchDailyNews(categories, feedback)
-            if (fetchResult.items.isNotEmpty()) {
-                // Extraheer topics per artikel en werk de topic-geschiedenis bij
-                val itemsWithTopics = topicHistoryService.extractAndUpdateFromNewsItems(username, fetchResult.items)
-                storageService.saveNews(username, itemsWithTopics)
-                log.info("{} nieuwsartikelen opgeslagen voor {} (met topics)", itemsWithTopics.size, username)
+            val savedItems = mutableListOf<NewsItem>()
+            val fetchResult = realNewsSourceService.fetchDailyNews(
+                categories = categories,
+                feedback = feedback,
+                onArticle = { item ->
+                    // Direct opslaan zodat het meteen zichtbaar is in de feed
+                    addItems(username, listOf(item))
+                    savedItems.add(item)
+                }
+            )
+            if (savedItems.isNotEmpty()) {
+                // Topics extraheren en bestaande items in de opslag bijwerken
+                val itemsWithTopics = topicHistoryService.extractAndUpdateFromNewsItems(username, savedItems)
+                val topicsById = itemsWithTopics.associate { it.id to it.topics }
+                val current = storageService.loadNews(username).toMutableList()
+                val updated = current.map { item ->
+                    val newTopics = topicsById[item.id]
+                    if (!newTopics.isNullOrEmpty()) item.copy(topics = newTopics) else item
+                }
+                storageService.saveNews(username, updated)
+                log.info("{} nieuwsartikelen opgeslagen voor {} (met topics)", savedItems.size, username)
             } else {
                 log.warn("Geen artikelen via web search, gebruik mock voor {}", username)
                 storageService.saveNews(username, mockNewsService.fetchDailyNews())

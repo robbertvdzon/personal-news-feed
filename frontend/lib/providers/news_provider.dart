@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/news_item.dart';
 import '../services/api_service.dart';
@@ -157,12 +158,30 @@ class NewsNotifier extends AsyncNotifier<List<NewsItem>> {
 
   Future<void> refreshFromSource() async {
     ref.read(_sourceRefreshingProvider.notifier).state = true;
+    // Poll elke 4 seconden zodat nieuwe artikelen direct zichtbaar zijn
+    final pollTimer = Timer.periodic(const Duration(seconds: 4), (_) async {
+      try {
+        final items = await ApiService.fetchNews();
+        if (state.valueOrNull != null) {
+          state = AsyncData(items);
+          _syncCaches(items);
+        }
+      } catch (_) {}
+    });
     try {
       await ApiService.refreshNews();
       await refresh();
     } finally {
+      pollTimer.cancel();
       ref.read(_sourceRefreshingProvider.notifier).state = false;
     }
+  }
+
+  void _syncCaches(List<NewsItem> items) {
+    final alreadyRead = items.where((i) => i.isRead).map((i) => i.id).toSet();
+    ref.read(readItemsProvider.notifier).initFromBackend(alreadyRead);
+    final alreadyStarred = items.where((i) => i.starred).map((i) => i.id).toSet();
+    ref.read(starredItemsProvider.notifier).initFromBackend(alreadyStarred);
   }
 }
 

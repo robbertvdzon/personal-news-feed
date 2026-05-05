@@ -9,6 +9,7 @@ import org.springframework.web.client.RestClient
 import tools.jackson.databind.ObjectMapper
 import tools.jackson.module.kotlin.readValue
 import java.time.Instant
+import java.time.LocalDate
 import java.util.UUID
 import java.util.concurrent.Semaphore
 
@@ -79,12 +80,15 @@ class AnthropicService(
             "\n\n$topicHistoryContext"
         else ""
 
+        val today = LocalDate.now()
         val articleList = articles.mapIndexed { i, a ->
-            "${i + 1}. Title: \"${a.title}\"\n   Snippet: ${a.snippet.take(200)}"
+            val datePart = if (a.publishedDate != null) "\n   Published: ${a.publishedDate}" else ""
+            "${i + 1}. Title: \"${a.title}\"$datePart\n   Snippet: ${a.snippet.take(200)}"
         }.joinToString("\n\n")
 
         val prompt = """
             You are a news curator. Select the $preferredCount to $maxCount most relevant articles for the user.
+            Today's date is: $today
 
             Category: $categoryName$instructionsPart$likedPart$dislikedPart$topicHistoryPart
 
@@ -97,6 +101,7 @@ class AnthropicService(
             - Avoid articles similar to disliked examples
             - Apply the topic history guidelines above when judging articles on familiar topics
             - Avoid duplicate topics within this selection
+            - IMPORTANT: If an article has a published date, prefer articles from the last 3 days. Reject articles older than 14 days unless they are highly relevant and no recent alternatives exist.
             - Return ONLY a JSON object, no explanation:
             {"selected": [1, 3, 5]}
             (use 1-based article numbers)
