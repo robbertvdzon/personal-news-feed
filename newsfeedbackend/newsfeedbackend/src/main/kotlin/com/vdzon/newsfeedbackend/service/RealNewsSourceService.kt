@@ -6,12 +6,20 @@ import com.vdzon.newsfeedbackend.model.NewsItem
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.time.Instant
+import java.time.LocalDate
 import java.util.UUID
 
 data class DailyFetchResult(
     val items: List<NewsItem>,
     val categoryResults: List<CategoryResult>,
     val totalCostUsd: Double
+)
+
+data class FetchAndSummarizeResult(
+    val items: List<NewsItem>,
+    val costUsd: Double,
+    val searchResultCount: Int,
+    val filteredCount: Int
 )
 
 data class FeedbackContext(
@@ -43,7 +51,7 @@ class RealNewsSourceService(
         val enabledCategories = categories.filter { it.enabled && !it.isSystem && it.id !in SYSTEM_CATEGORY_IDS }
 
         enabledCategories.forEach { cat ->
-            val (items, cost) = fetchAndSummarize(
+            val result = fetchAndSummarize(
                 subject = cat.name,
                 extraInstructions = cat.extraInstructions,
                 preferredCount = cat.preferredCount,
@@ -54,10 +62,18 @@ class RealNewsSourceService(
                 searchDays = 1,
                 onArticle = onArticle
             )
-            allItems.addAll(items)
-            totalCost += cost
-            categoryResults.add(CategoryResult(cat.id, cat.name, items.size, cost))
-            log.info("Categorie '{}': {} artikelen, kosten \${}", cat.name, items.size, "%.5f".format(cost))
+            allItems.addAll(result.items)
+            totalCost += result.costUsd
+            categoryResults.add(CategoryResult(
+                categoryId = cat.id,
+                categoryName = cat.name,
+                articleCount = result.items.size,
+                costUsd = result.costUsd,
+                searchResultCount = result.searchResultCount,
+                filteredCount = result.filteredCount
+            ))
+            log.info("Categorie '{}': {} gevonden, {} na filter, {} toegevoegd, kosten \${}",
+                cat.name, result.searchResultCount, result.filteredCount, result.items.size, "%.5f".format(result.costUsd))
         }
 
         // Dagelijks overzicht: redactionele briefing van alle gevonden artikelen
@@ -89,7 +105,7 @@ class RealNewsSourceService(
     ): Pair<List<NewsItem>, Double> {
         val categoryId = detectCategory(subject, categories)
         val categoryWebsites = categories.firstOrNull { it.id == categoryId }?.websites ?: emptyList()
-        val (items, cost) = fetchAndSummarize(
+        val result = fetchAndSummarize(
             subject = subject,
             extraInstructions = extraInstructions,
             preferredCount = preferredCount,
@@ -100,8 +116,9 @@ class RealNewsSourceService(
             searchDays = maxAgeDays,
             onArticle = onArticle
         )
-        log.info("Onderwerp '{}': {} artikelen, kosten \${}", subject, items.size, "%.5f".format(cost))
-        return Pair(items, cost)
+        log.info("Onderwerp '{}': {} gevonden, {} na filter, {} toegevoegd, kosten \${}",
+            subject, result.searchResultCount, result.filteredCount, result.items.size, "%.5f".format(result.costUsd))
+        return Pair(result.items, result.costUsd)
     }
 
     // ── Gedeeld pipeline: query → zoek → selecteer → extract → samenvatten ────
@@ -116,7 +133,7 @@ class RealNewsSourceService(
         feedback: FeedbackContext,
         searchDays: Int = 2,
         onArticle: (NewsItem) -> Unit
-    ): Pair<List<NewsItem>, Double> {
+    ): FetchAndSummarizeResult {
         var totalCost = 0.0
 
         // Stap 1: Claude genereert een gerichte Engelse zoekquery (met feedback context)
@@ -141,7 +158,20 @@ class RealNewsSourceService(
 
         if (searchResults.isEmpty()) {
             log.warn("Geen zoekresultaten voor '{}'", subject)
-            return Pair(emptyList(), 0.0)
+            return FetchAndSummarizeResult(emptyList(), 0.0, 0, 0)
+        }
+        val searchResultCount = searchResults.size
+
+        // Stap 2.5: Harde datum-filter — verwijder artikelen met een bekende datum die ouder zijn dan searchDays
+        searchResults = filterByDate(searchResults, searchDays)
+        val filteredCount = searchResults.size
+        if (filteredCount < searchResultCount) {
+            log.info("Datum-filter: {}/{} artikelen bewaard voor '{}' (max {} dagen oud)",
+                filteredCount, searchResultCount, subject, searchDays)
+        }
+        if (searchResults.isEmpty()) {
+            log.warn("Geen artikelen over na datum-filter voor '{}'", subject)
+            return FetchAndSummarizeResult(emptyList(), 0.0, searchResultCount, 0)
         }
 
         // Stap 3: Claude selecteert de meest relevante artikelen (met feedback + topic-geschiedenis)
@@ -159,7 +189,7 @@ class RealNewsSourceService(
 
         if (selectedIndices.isEmpty()) {
             log.warn("Geen artikelen geselecteerd voor '{}'", subject)
-            return Pair(emptyList(), totalCost)
+            return FetchAndSummarizeResult(emptyList(), totalCost, searchResultCount, filteredCount)
         }
 
         // Stap 4: Tavily haalt de volledige tekst op voor de geselecteerde URLs
@@ -195,7 +225,7 @@ class RealNewsSourceService(
             totalCost += cost
         }
 
-        return Pair(newsItems, totalCost)
+        return FetchAndSummarizeResult(newsItems, totalCost, searchResultCount, filteredCount)
     }
 
     private fun detectCategory(subject: String, categories: List<CategorySettings>): String {
@@ -203,6 +233,24 @@ class RealNewsSourceService(
         return categories.firstOrNull { cat ->
             lc.contains(cat.id) || lc.contains(cat.name.lowercase())
         }?.id ?: "overig"
+    }
+
+    /**
+     * Verwijdert artikelen waarvan de publicatiedatum bekend is én ouder is dan maxAgeDays.
+     * Artikelen zonder datum worden altijd bewaard (we weten immers niet hoe oud ze zijn).
+     * Er wordt een buffer van +1 dag gebruikt voor tijdzone-verschillen.
+     */
+    private fun filterByDate(results: List<TavilySearchResult>, maxAgeDays: Int): List<TavilySearchResult> {
+        val cutoff = LocalDate.now().minusDays(maxAgeDays.toLong() + 1)
+        return results.filter { result ->
+            val pubDate = result.publishedDate ?: return@filter true // geen datum → bewaren
+            try {
+                val date = LocalDate.parse(pubDate.take(10)) // neem alleen YYYY-MM-DD deel
+                !date.isBefore(cutoff)
+            } catch (_: Exception) {
+                true // onparseerbare datum → bewaren
+            }
+        }
     }
 
     /** Probeert een datum te herkennen in de URL, bijv. /2025/01/21/ of /2025-01-21 */

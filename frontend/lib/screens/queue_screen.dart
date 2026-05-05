@@ -275,19 +275,35 @@ class _DailyUpdateTile extends ConsumerWidget {
                       style: TextStyle(color: Colors.grey[600], fontSize: 12, fontWeight: FontWeight.w500)),
                   const SizedBox(height: 6),
                   ...request.categoryResults.map((cat) => Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: Row(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(cat.categoryName,
-                                  style: const TextStyle(fontSize: 12)),
+                            Row(
+                              children: [
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(cat.categoryName,
+                                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+                                ),
+                                Text('\$${cat.costUsd.toStringAsFixed(4)}',
+                                    style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                              ],
                             ),
-                            Text('${cat.articleCount} art.',
-                                style: TextStyle(fontSize: 11, color: Colors.grey[500])),
-                            const SizedBox(width: 8),
-                            Text('\$${cat.costUsd.toStringAsFixed(4)}',
-                                style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                            Padding(
+                              padding: const EdgeInsets.only(left: 16, top: 2),
+                              child: Row(
+                                children: [
+                                  _StatPill(label: 'gevonden', value: cat.searchResultCount, color: Colors.blue),
+                                  const SizedBox(width: 4),
+                                  if (cat.filteredCount < cat.searchResultCount) ...[
+                                    _StatPill(label: 'na filter', value: cat.filteredCount, color: Colors.orange),
+                                    const SizedBox(width: 4),
+                                  ],
+                                  _StatPill(label: 'in feed', value: cat.articleCount, color: Colors.green),
+                                ],
+                              ),
+                            ),
                           ],
                         ),
                       )),
@@ -643,6 +659,30 @@ String _formatDuration(int seconds) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Elapsed time widget — telt de verstreken tijd elke seconde
 // ─────────────────────────────────────────────────────────────────────────────
+
+class _StatPill extends StatelessWidget {
+  final String label;
+  final int value;
+  final MaterialColor color;
+
+  const _StatPill({required this.label, required this.value, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.shade200),
+      ),
+      child: Text(
+        '$value $label',
+        style: TextStyle(fontSize: 10, color: color.shade700, fontWeight: FontWeight.w500),
+      ),
+    );
+  }
+}
 
 class _ElapsedTimeText extends StatefulWidget {
   final DateTime since;
