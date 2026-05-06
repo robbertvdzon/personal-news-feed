@@ -1,5 +1,6 @@
 enum PodcastStatus {
   pending,
+  determiningTopics,
   generatingScript,
   generatingAudio,
   done,
@@ -9,6 +10,8 @@ enum PodcastStatus {
     switch (value) {
       case 'PENDING':
         return PodcastStatus.pending;
+      case 'DETERMINING_TOPICS':
+        return PodcastStatus.determiningTopics;
       case 'GENERATING_SCRIPT':
         return PodcastStatus.generatingScript;
       case 'GENERATING_AUDIO':
@@ -24,6 +27,7 @@ enum PodcastStatus {
 
   bool get isGenerating =>
       this == PodcastStatus.pending ||
+      this == PodcastStatus.determiningTopics ||
       this == PodcastStatus.generatingScript ||
       this == PodcastStatus.generatingAudio;
 
@@ -31,6 +35,8 @@ enum PodcastStatus {
     switch (this) {
       case PodcastStatus.pending:
         return 'In wachtrij';
+      case PodcastStatus.determiningTopics:
+        return 'Onderwerpen bepalen…';
       case PodcastStatus.generatingScript:
         return 'Script schrijven…';
       case PodcastStatus.generatingAudio:

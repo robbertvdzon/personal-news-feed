@@ -8,6 +8,7 @@ import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Service
 import java.io.File
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
@@ -15,6 +16,8 @@ import java.time.ZonedDateTime
 class PodcastProcessor(
     private val storageService: StorageService,
     private val newsService: NewsService,
+    private val rssFetchService: RssFetchService,
+    private val settingsService: SettingsService,
     private val anthropicService: AnthropicService,
     private val openAITtsService: OpenAITtsService,
     private val elevenLabsTtsService: ElevenLabsTtsService,
@@ -53,29 +56,60 @@ class PodcastProcessor(
     @Async
     fun process(username: String, podcastId: String) {
         val startInstant = Instant.now()
-        updateStatus(username, podcastId, PodcastStatus.GENERATING_SCRIPT)
         try {
             val podcast = storageService.loadPodcasts(username)
                 .firstOrNull { it.id == podcastId } ?: return
 
-            // Nieuwsartikelen van de opgegeven periode
-            val cutoff = Instant.now().minusSeconds(podcast.periodDays * 24L * 3600)
-            val articles = newsService.getAll(username).filter { item ->
-                !item.isSummary && try {
-                    Instant.parse(item.timestamp).isAfter(cutoff)
-                } catch (_: Exception) { false }
+            // Ruwe RSS-artikelen ophalen voor de opgegeven periode
+            val rssUrls = storageService.loadRssFeeds(username).feeds
+            val allRss = rssFetchService.fetchAll(rssUrls)
+            val cutoffDate = LocalDate.now().minusDays(podcast.periodDays.toLong())
+            val rssArticles = allRss.filter { article ->
+                val pubDate = article.publishedDate ?: return@filter true
+                try { !LocalDate.parse(pubDate.take(10)).isBefore(cutoffDate) }
+                catch (_: Exception) { true }
             }
-            log.info("Podcast script genereren: {} artikelen ({} dagen) voor {}", articles.size, podcast.periodDays, username)
+            log.info("Podcast RSS: {} artikelen na filter ({} dagen) voor {}", rssArticles.size, podcast.periodDays, username)
 
-            // Topic-geschiedenis ophalen voor betere onderwerpkeuze
+            // Gebruikersfeedback en categorieën voor betere onderwerpkeuze
+            val likedTitles   = newsService.getLikedItems(username).map { it.title }
+            val dislikedTitles = newsService.getDislikedItems(username).map { it.title }
+            val starredTitles  = newsService.getAll(username).filter { it.starred }.map { it.title }
+            val categories     = settingsService.getSettings(username)
+            val categoryInterests = categories.filter { it.enabled && !it.isSystem }.map { it.name }
             val topicHistoryContext = topicHistoryService.buildPodcastContext(username)
 
+            // Stap 1: Onderwerpen bepalen (alleen als geen custom onderwerpen)
+            val (topicPlan, topicsCostStep1) = if (podcast.customTopics.isEmpty()) {
+                updateStatus(username, podcastId, PodcastStatus.DETERMINING_TOPICS)
+                log.info("Podcast onderwerpen bepalen uit {} RSS-artikelen voor {}", rssArticles.size, username)
+                anthropicService.determinePodcastTopics(
+                    rssArticles         = rssArticles,
+                    likedTitles         = likedTitles,
+                    dislikedTitles      = dislikedTitles,
+                    starredTitles       = starredTitles,
+                    categoryInterests   = categoryInterests,
+                    topicHistoryContext = topicHistoryContext,
+                    periodDays          = podcast.periodDays
+                ).let { (plan, cost) ->
+                    log.info("Podcast onderwerpen bepaald voor {}", username)
+                    Pair(plan as String?, cost)
+                }
+            } else {
+                Pair(null, 0.0)
+            }
+
+            // Stap 2: Script genereren
+            updateStatus(username, podcastId, PodcastStatus.GENERATING_SCRIPT)
+            log.info("Podcast script genereren voor {}", username)
             val (scriptText, scriptCost) = anthropicService.generatePodcastScript(
-                articles = articles,
-                periodDays = podcast.periodDays,
-                durationMinutes = podcast.durationMinutes,
+                articles            = emptyList(),
+                periodDays          = podcast.periodDays,
+                durationMinutes     = podcast.durationMinutes,
                 topicHistoryContext = topicHistoryContext,
-                customTopics = podcast.customTopics
+                customTopics        = podcast.customTopics,
+                topicPlan           = topicPlan,
+                rssArticles         = rssArticles
             )
 
             // Onderwerpen extraheren en titel bijwerken
@@ -110,7 +144,7 @@ class PodcastProcessor(
                 else -> openAITtsService.generateAudio(scriptText, audioFile)
             }
 
-            val totalCost = scriptCost + topicsCost + ttsCost
+            val totalCost = topicsCostStep1 + scriptCost + topicsCost + ttsCost
             val generationSeconds = (Instant.now().epochSecond - startInstant.epochSecond).toInt()
 
             updatePodcast(username, podcastId) {

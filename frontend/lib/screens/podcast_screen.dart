@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -1034,25 +1035,22 @@ class _CreatePodcastDialog extends StatefulWidget {
 }
 
 class _CreatePodcastDialogState extends State<_CreatePodcastDialog> {
-  int _periodDays = 7;
   bool _loading = false;
   TtsProvider _ttsProvider = TtsProvider.openai;
 
   final _durationController = TextEditingController(text: '10');
+  final _periodController = TextEditingController(text: '7');
   final _topicsController = TextEditingController();
-
-  static const _periods = [
-    (label: 'Vandaag', days: 1),
-    (label: '1 week', days: 7),
-    (label: '2 weken', days: 14),
-  ];
 
   @override
   void dispose() {
     _durationController.dispose();
+    _periodController.dispose();
     _topicsController.dispose();
     super.dispose();
   }
+
+  int get _periodDays => int.tryParse(_periodController.text.trim()) ?? 7;
 
   List<String> get _customTopics => _topicsController.text
       .split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
@@ -1098,15 +1096,19 @@ class _CreatePodcastDialogState extends State<_CreatePodcastDialog> {
             const SizedBox(height: 16),
             _Label('Nieuws-periode${hasTopics ? ' (achtergrond)' : ''}'),
             const SizedBox(height: 6),
-            Wrap(
-              spacing: 8,
-              children: _periods
-                  .map((p) => ChoiceChip(
-                        label: Text(p.label),
-                        selected: _periodDays == p.days,
-                        onSelected: (_) => setState(() => _periodDays = p.days),
-                      ))
-                  .toList(),
+            SizedBox(
+              width: 140,
+              child: TextField(
+                controller: _periodController,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  suffixText: 'dagen',
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  isDense: true,
+                ),
+              ),
             ),
             const SizedBox(height: 16),
             _Label('Duur (minuten)'),
@@ -1157,9 +1159,15 @@ class _CreatePodcastDialogState extends State<_CreatePodcastDialog> {
               ? null
               : () async {
                   final dur = _durationMinutes;
+                  final period = _periodDays;
                   if (dur < 1 || dur > 60) {
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                         content: Text('Duur moet tussen 1 en 60 minuten liggen')));
+                    return;
+                  }
+                  if (period < 1 || period > 90) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content: Text('Periode moet tussen 1 en 90 dagen liggen')));
                     return;
                   }
                   setState(() => _loading = true);

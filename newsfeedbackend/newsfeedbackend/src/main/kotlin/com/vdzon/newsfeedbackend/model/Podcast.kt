@@ -1,7 +1,7 @@
 package com.vdzon.newsfeedbackend.model
 
 enum class PodcastStatus {
-    PENDING, GENERATING_SCRIPT, GENERATING_AUDIO, DONE, FAILED
+    PENDING, DETERMINING_TOPICS, GENERATING_SCRIPT, GENERATING_AUDIO, DONE, FAILED
 }
 
 enum class TtsProvider {

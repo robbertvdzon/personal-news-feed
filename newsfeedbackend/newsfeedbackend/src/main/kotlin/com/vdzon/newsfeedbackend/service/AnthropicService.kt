@@ -241,12 +241,66 @@ class AnthropicService(
     }
 
     // Schrijft een Nederlandstalig podcast-interview-script
+    // Analyseert ruwe RSS-artikelen en bepaalt de beste podcast-onderwerpen
+    fun determinePodcastTopics(
+        rssArticles: List<TavilySearchResult>,
+        likedTitles: List<String> = emptyList(),
+        dislikedTitles: List<String> = emptyList(),
+        starredTitles: List<String> = emptyList(),
+        categoryInterests: List<String> = emptyList(),
+        topicHistoryContext: String = "",
+        periodDays: Int,
+        durationMinutes: Int = 10
+    ): Pair<String, Double> {
+        val articleList = rssArticles.take(200).mapIndexed { i, a ->
+            "${i + 1}. [${a.source}] ${a.title}"
+        }.joinToString("\n")
+
+        val feedbackPart = buildString {
+            if (likedTitles.isNotEmpty())
+                append("\n\nInteressant gevonden door gebruiker:\n${likedTitles.take(15).joinToString("\n") { "- $it" }}")
+            if (dislikedTitles.isNotEmpty())
+                append("\n\nNiet relevant gevonden door gebruiker:\n${dislikedTitles.take(10).joinToString("\n") { "- $it" }}")
+            if (starredTitles.isNotEmpty())
+                append("\n\nBewaard door gebruiker:\n${starredTitles.take(10).joinToString("\n") { "- $it" }}")
+            if (categoryInterests.isNotEmpty())
+                append("\n\nCategorieën waarvoor gebruiker interesse heeft: ${categoryInterests.joinToString(", ")}")
+        }
+
+        val historyPart = if (topicHistoryContext.isNotBlank()) "\n\n$topicHistoryContext" else ""
+
+        val prompt = """
+            Analyseer de volgende ${rssArticles.size} RSS-artikelen van de afgelopen $periodDays dag(en) en bepaal de beste onderwerpen voor een Nederlandstalige tech-podcast.
+
+            ARTIKELEN (titel en bron):
+            $articleList
+            $feedbackPart$historyPart
+
+            Richtlijnen voor onderwerpkeuze:
+            - Onderwerpen die in MEERDERE feeds terugkomen zijn "hot" — geef die voorrang
+            - Houd rekening met de interesses en feedback van de gebruiker
+            - Vermijd onderwerpen die recent al uitgebreid in de podcast zijn behandeld (zie geschiedenis)
+
+            Geef een gestructureerd redactioneel briefing-document met:
+            - 2-3 HOOFDONDERWERPEN: elk met een kernvraag, waarom het hot is, en interessante invalshoek
+            - 3-5 NIEUWSITEMS: kort te noemen nieuwtjes (1-2 zinnen per stuk)
+
+            Schrijf in het Nederlands. Geen extra uitleg, alleen het briefing-document.
+        """.trimIndent()
+
+        val (text, cost) = callWithRetry(prompt, summaryModel, maxTokens = 2000)
+        log.info("Podcast onderwerpen bepaald: {} tekens, kosten \${}", text.length, "%.4f".format(cost))
+        return Pair(text.trim(), cost)
+    }
+
     fun generatePodcastScript(
         articles: List<NewsItem>,
         periodDays: Int,
         durationMinutes: Int,
         topicHistoryContext: String = "",
-        customTopics: List<String> = emptyList()
+        customTopics: List<String> = emptyList(),
+        topicPlan: String? = null,
+        rssArticles: List<TavilySearchResult> = emptyList()
     ): Pair<String, Double> {
         val targetWords = durationMinutes * 140
 
@@ -290,8 +344,43 @@ class AnthropicService(
 
                 Geen andere tekst, geen kopteksten, geen nummers, geen uitleg.
             """.trimIndent()
+        } else if (topicPlan != null) {
+            // Modus: twee-staps — gebruik vooraf bepaald topic-plan op basis van ruwe RSS
+            val contextPart = if (rssArticles.isNotEmpty()) {
+                val snippets = rssArticles.take(40).mapIndexed { i, a ->
+                    "${i + 1}. [${a.source}] ${a.title}\n   ${a.snippet.take(200)}"
+                }.joinToString("\n\n")
+                "\n\nAchtergrond — relevante RSS-artikelen:\n$snippets"
+            } else ""
+
+            """
+                Schrijf een Nederlandstalig podcast-interview van circa $durationMinutes minuten (~$targetWords woorden)
+                tussen een INTERVIEWER en een GAST (senior software developer).
+
+                Gebruik het volgende redactionele briefing-document als leidraad voor de inhoud:
+
+                $topicPlan
+                $contextPart$previousTopicsPart
+
+                Richtlijnen:
+                - Schrijf als een natuurlijk, vloeiend gesprek — geen stijve Q&A
+                - Gebruik korte, duidelijke zinnen geschikt voor audio
+                - INTERVIEWER introduceert onderwerpen en stelt vragen
+                - GAST geeft diepgaande antwoorden vanuit een developer-perspectief
+                - Vermijd moeilijk uit te spreken afkortingen; spreek ze uit (bv. "A I" niet "AI")
+                - Verdeel de spreektijd ongeveer gelijk
+                - Begin met een korte intro van de INTERVIEWER
+                - Behandel elk hoofdonderwerp uitgebreid, nieuwsitems kort (1-2 zinnen)
+                - Eindig met een samenvatting en afsluiting door de INTERVIEWER
+
+                VERPLICHT FORMAAT — elke spreekbeurt op exact één regel:
+                INTERVIEWER: [tekst]
+                GAST: [tekst]
+
+                Geen andere tekst, geen kopteksten, geen nummers, geen uitleg.
+            """.trimIndent()
         } else {
-            // Modus: gebaseerd op nieuwsartikelen van de afgelopen periode
+            // Modus: gebaseerd op nieuwsartikelen van de afgelopen periode (legacy)
             val articleList = articles.take(30).mapIndexed { i, a ->
                 "${i + 1}. [${a.category}] ${a.title}\n   ${a.summary.take(300)}"
             }.joinToString("\n\n")
