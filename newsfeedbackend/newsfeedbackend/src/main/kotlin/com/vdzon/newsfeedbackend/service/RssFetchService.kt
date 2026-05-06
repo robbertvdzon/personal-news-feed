@@ -142,19 +142,26 @@ class RssFetchService {
 
     // ── Datum parseren ────────────────────────────────────────────────────────
 
-    private val rssFmt1 = DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss z",  Locale.ENGLISH)
-    private val rssFmt2 = DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss Z",  Locale.ENGLISH)
-    private val rssFmt3 = DateTimeFormatter.ofPattern("d MMM yyyy HH:mm:ss z",         Locale.ENGLISH)
-    private val rssFmt4 = DateTimeFormatter.ofPattern("d MMM yyyy HH:mm:ss Z",         Locale.ENGLISH)
+    private val rssDateFormats = listOf(
+        "EEE, dd MMM yyyy HH:mm:ss z",   // Tue, 06 May 2026 10:00:00 GMT
+        "EEE, dd MMM yyyy HH:mm:ss Z",   // Tue, 06 May 2026 10:00:00 +0000
+        "EEE, d MMM yyyy HH:mm:ss z",    // Tue, 6 May 2026 10:00:00 GMT  (enkele dag)
+        "EEE, d MMM yyyy HH:mm:ss Z",    // Tue, 6 May 2026 10:00:00 +0000
+        "dd MMM yyyy HH:mm:ss z",        // 06 May 2026 10:00:00 GMT
+        "dd MMM yyyy HH:mm:ss Z",        // 06 May 2026 10:00:00 +0000
+        "d MMM yyyy HH:mm:ss z",         // 6 May 2026 10:00:00 GMT
+        "d MMM yyyy HH:mm:ss Z",         // 6 May 2026 10:00:00 +0000
+    ).map { DateTimeFormatter.ofPattern(it, Locale.ENGLISH) }
 
     private fun parseRssDate(date: String): String? {
         val clean = date.trim()
-        for (fmt in listOf(rssFmt1, rssFmt2, rssFmt3, rssFmt4)) {
+        for (fmt in rssDateFormats) {
             try {
                 return OffsetDateTime.parse(clean, fmt)
                     .withOffsetSameInstant(ZoneOffset.UTC).toLocalDate().toString()
             } catch (_: Exception) {}
         }
+        // Fallback: zoek YYYY-MM-DD patroon in de string
         return Regex("""\d{4}-\d{2}-\d{2}""").find(clean)?.value
     }
 

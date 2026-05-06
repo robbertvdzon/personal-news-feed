@@ -231,9 +231,16 @@ final newsLoadingProvider = Provider<bool>((ref) {
 final unreadCountByCategoryProvider = Provider<Map<String, int>>((ref) {
   final items = ref.watch(newsProvider).valueOrNull ?? [];
   final readItems = ref.watch(readItemsProvider);
+  final enabledIds = ref.watch(enabledCategoryIdsProvider);
   final counts = <String, int>{};
   for (final item in items) {
-    if (!item.isSummary && !readItems.contains(item.id) && !item.isRead) {
+    final isUnread = !readItems.contains(item.id) && !item.isRead;
+    if (!isUnread) continue;
+    if (item.isSummary) {
+      // Dagelijks overzicht telt mee voor de 'dagelijks-overzicht' tab
+      counts[item.category] = (counts[item.category] ?? 0) + 1;
+    } else if (enabledIds.contains(item.category)) {
+      // Gewone items alleen tellen als de categorie actief is
       counts[item.category] = (counts[item.category] ?? 0) + 1;
     }
   }

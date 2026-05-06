@@ -442,7 +442,8 @@ class AnthropicService(
         return try {
             val result = objectMapper.readValue<SummarizedArticle>(json)
             log.info("Samenvatting klaar voor '{}'", result.title.take(50))
-            Pair(result, cost)
+            // Source altijd van het originele artikel (voorkomt dat Claude hem overschrijft)
+            Pair(result.copy(source = article.source), cost)
         } catch (e: Exception) {
             log.error("JSON parsen mislukt voor '{}': {}", article.title, e.message)
             Pair(SummarizedArticle(article.title, article.content.take(500), article.url, article.source), cost)

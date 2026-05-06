@@ -13,8 +13,6 @@ class LoggingInterceptor : HandlerInterceptor {
     private val log = LoggerFactory.getLogger(LoggingInterceptor::class.java)
 
     override fun preHandle(request: HttpServletRequest, response: HttpServletResponse, handler: Any): Boolean {
-        val username = SecurityContextHolder.getContext().authentication?.name ?: "anonymous"
-        log.info("--> {} {} [{}]", request.method, request.requestURI, username)
         return true
     }
 
@@ -24,12 +22,9 @@ class LoggingInterceptor : HandlerInterceptor {
         handler: Any,
         ex: Exception?
     ) {
-        val status = response.status
-        val username = SecurityContextHolder.getContext().authentication?.name ?: "anonymous"
         if (ex != null) {
-            log.warn("<-- {} {} [{}] {} - {}", request.method, request.requestURI, username, status, ex.message)
-        } else {
-            log.info("<-- {} {} [{}] {}", request.method, request.requestURI, username, status)
+            val username = SecurityContextHolder.getContext().authentication?.name ?: "anonymous"
+            log.warn("<-- {} {} [{}] {} - {}", request.method, request.requestURI, username, response.status, ex.message)
         }
     }
 }
