@@ -9,21 +9,11 @@ class NewsService(
     private val storageService: StorageService,
     private val settingsService: SettingsService,
     private val realNewsSourceService: RealNewsSourceService,
-    private val mockNewsService: MockNewsService,
     private val topicHistoryService: TopicHistoryService
 ) {
     private val log = LoggerFactory.getLogger(NewsService::class.java)
 
-    fun getAll(username: String): List<NewsItem> {
-        val items = storageService.loadNews(username)
-        if (items.isEmpty()) {
-            log.info("Geen nieuws voor {}, initialiseer met mock data", username)
-            val initial = mockNewsService.fetchDailyNews()
-            storageService.saveNews(username, initial)
-            return initial
-        }
-        return items
-    }
+    fun getAll(username: String): List<NewsItem> = storageService.loadNews(username)
 
     fun addItems(username: String, items: List<NewsItem>) {
         val current = storageService.loadNews(username).toMutableList()
@@ -144,8 +134,7 @@ class NewsService(
                 storageService.saveNews(username, updated)
                 log.info("{} nieuwsartikelen opgeslagen voor {} (met topics)", savedItems.size, username)
             } else {
-                log.warn("Geen artikelen via web search, gebruik mock voor {}", username)
-                storageService.saveNews(username, mockNewsService.fetchDailyNews())
+                log.warn("Geen nieuwe artikelen gevonden voor {}", username)
             }
         } catch (e: Exception) {
             log.error("Nieuws verversen mislukt voor {}: {}", username, e.message)
