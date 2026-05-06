@@ -46,6 +46,7 @@ class RequestProcessor(
             val categories = settingsService.getSettings(username)
             val rssUrls = storageService.loadRssFeeds(username).feeds
             val feedback = loadFeedback(username)
+            val existingUrls = newsService.getAll(username).map { it.url }.toSet()
             val (articles, costUsd) = realNewsSourceService.fetchArticlesForSubject(
                 subject = request.subject,
                 preferredCount = request.preferredCount,
@@ -54,6 +55,7 @@ class RequestProcessor(
                 categories = categories,
                 rssUrls = rssUrls,
                 feedback = feedback,
+                existingUrls = existingUrls,
                 onArticle = { item ->
                     if (!isCancelled(request.id)) {
                         newsService.addItems(username, listOf(item))
@@ -91,10 +93,12 @@ class RequestProcessor(
             val categories = settingsService.getSettings(username)
             val rssUrls = storageService.loadRssFeeds(username).feeds
             val feedback = loadFeedback(username)
+            val existingUrls = newsService.getAll(username).map { it.url }.toSet()
             val fetchResult = realNewsSourceService.fetchDailyNews(
                 categories = categories,
                 rssUrls = rssUrls,
                 feedback = feedback,
+                existingUrls = existingUrls,
                 onArticle = { item ->
                     if (!isCancelled(requestId)) {
                         newsService.addItems(username, listOf(item))

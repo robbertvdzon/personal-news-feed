@@ -36,6 +36,7 @@ class RealNewsSourceService(
         categories: List<CategorySettings>,
         rssUrls: List<String> = emptyList(),
         feedback: FeedbackContext = FeedbackContext(),
+        existingUrls: Set<String> = emptySet(),
         onArticle: (NewsItem) -> Unit = {}
     ): DailyFetchResult {
         log.info("Fetch daily news, START")
@@ -54,8 +55,9 @@ class RealNewsSourceService(
         val filtered = filterByDate(allRssArticles, 1)
         log.info("RSS na datum-filter (1 dag): {} artikelen", filtered.size)
 
-        // Track seen URLs for deduplication across categories
-        val seenUrls = mutableSetOf<String>()
+        // Track seen URLs: start met al bestaande URLs zodat duplicaten worden overgeslagen
+        val seenUrls = existingUrls.toMutableSet()
+        log.info("Deduplicatie: {} al bestaande URLs uitgesloten", existingUrls.size)
 
         // Process each enabled non-system category
         enabledCategories.forEach { cat ->
@@ -123,6 +125,7 @@ class RealNewsSourceService(
         categories: List<CategorySettings>,
         rssUrls: List<String> = emptyList(),
         feedback: FeedbackContext = FeedbackContext(),
+        existingUrls: Set<String> = emptySet(),
         onArticle: (NewsItem) -> Unit = {}
     ): Pair<List<NewsItem>, Double> {
         val categoryId = detectCategory(subject, categories)
@@ -135,13 +138,18 @@ class RealNewsSourceService(
         val filtered = filterByDate(allRssArticles, maxAgeDays)
         log.info("RSS na datum-filter ({} dagen) voor '{}': {} artikelen", maxAgeDays, subject, filtered.size)
 
-        if (filtered.isEmpty()) {
-            log.warn("Geen RSS artikelen beschikbaar voor '{}'", subject)
+        // Verwijder artikelen die al in de feed staan
+        val deduped = filtered.filter { it.url !in existingUrls }
+        log.info("RSS na deduplicatie voor '{}': {} artikelen ({} al bestaand overgeslagen)",
+            subject, deduped.size, filtered.size - deduped.size)
+
+        if (deduped.isEmpty()) {
+            log.warn("Geen nieuwe RSS artikelen beschikbaar voor '{}'", subject)
             return Pair(emptyList(), 0.0)
         }
 
         return selectExtractAndSummarize(
-            articles = filtered,
+            articles = deduped,
             subject = subject,
             extraInstructions = extraInstructions,
             preferredCount = preferredCount,
