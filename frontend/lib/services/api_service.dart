@@ -5,6 +5,7 @@ import '../models/category.dart';
 import '../models/news_item.dart';
 import '../models/news_request.dart';
 import '../models/podcast.dart' show Podcast, TtsProvider;
+import '../models/rss_feeds_settings.dart';
 
 class ApiService {
   static final _client = http.Client();
@@ -69,6 +70,23 @@ class ApiService {
       Uri.parse('${AppConfig.apiBaseUrl}/api/settings'),
       headers: _headers,
       body: jsonEncode(categories.map((c) => c.toJson()).toList()),
+    );
+  }
+
+  static Future<RssFeedsSettings> fetchRssFeeds() async {
+    final response = await _client.get(
+      Uri.parse('${AppConfig.apiBaseUrl}/api/rss-feeds'),
+      headers: _headers,
+    );
+    if (response.statusCode != 200) return const RssFeedsSettings();
+    return RssFeedsSettings.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
+  static Future<void> saveRssFeeds(RssFeedsSettings settings) async {
+    await _client.put(
+      Uri.parse('${AppConfig.apiBaseUrl}/api/rss-feeds'),
+      headers: _headers,
+      body: jsonEncode(settings.toJson()),
     );
   }
 

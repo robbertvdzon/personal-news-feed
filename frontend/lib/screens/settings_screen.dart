@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../providers/appearance_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/news_provider.dart';
+import '../providers/rss_feeds_provider.dart';
 import '../providers/settings_provider.dart';
 import '../models/category.dart';
 
@@ -66,6 +68,16 @@ class SettingsScreen extends ConsumerWidget {
           ...visibleCategories.map((cat) => _CategoryRow(category: cat)),
           const SizedBox(height: 8),
           _AddCategoryButton(),
+
+          const SizedBox(height: 24),
+          _SectionHeader('RSS Feeds'),
+          const SizedBox(height: 4),
+          Text(
+            'Globale lijst van RSS feeds die gebruikt worden voor nieuws ophalen.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey[500]),
+          ),
+          const SizedBox(height: 12),
+          _RssFeedsSection(),
 
           const SizedBox(height: 24),
           _SectionHeader('Opruimen'),
@@ -572,6 +584,122 @@ class _AddCategoryButton extends ConsumerWidget {
             child: const Text('Toevoegen'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RSS Feeds section
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _RssFeedsSection extends ConsumerStatefulWidget {
+  @override
+  ConsumerState<_RssFeedsSection> createState() => _RssFeedsSectionState();
+}
+
+class _RssFeedsSectionState extends ConsumerState<_RssFeedsSection> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _add() {
+    final url = _controller.text.trim();
+    if (url.isEmpty) return;
+    ref.read(rssFeedsProvider.notifier).addFeed(url);
+    _controller.clear();
+  }
+
+  Future<void> _openUrl(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final feeds = ref.watch(rssFeedsProvider).valueOrNull?.feeds ?? [];
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (feeds.isEmpty)
+              Text(
+                'Geen RSS feeds geconfigureerd',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: Colors.grey[500], fontStyle: FontStyle.italic),
+              )
+            else
+              ...feeds.map((f) => Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.rss_feed, size: 14, color: Colors.orange),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => _openUrl(f),
+                            child: Text(
+                              f.replaceAll(RegExp(r'^https?://'), ''),
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Theme.of(context).colorScheme.primary,
+                                decoration: TextDecoration.underline,
+                              ),
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 16),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                          tooltip: 'Verwijderen',
+                          onPressed: () =>
+                              ref.read(rssFeedsProvider.notifier).removeFeed(f),
+                        ),
+                      ],
+                    ),
+                  )),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _controller,
+                    decoration: const InputDecoration(
+                      hintText: 'https://blog.example.com/feed',
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    ),
+                    style: const TextStyle(fontSize: 13),
+                    onSubmitted: (_) => _add(),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: _add,
+                  icon: const Icon(Icons.add),
+                  tooltip: 'Toevoegen',
+                  style: IconButton.styleFrom(
+                    backgroundColor:
+                        Theme.of(context).colorScheme.primaryContainer,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
