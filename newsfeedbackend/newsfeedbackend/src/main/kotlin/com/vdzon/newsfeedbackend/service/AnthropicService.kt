@@ -253,8 +253,13 @@ class AnthropicService(
         durationMinutes: Int = 10
     ): Pair<String, Double> {
         val articleList = rssArticles.take(200).mapIndexed { i, a ->
-            "${i + 1}. [${a.source}] ${a.title}"
-        }.joinToString("\n")
+            val datePart = if (a.publishedDate != null) " (${a.publishedDate})" else ""
+            val snippet = a.snippet.take(1000).trim()
+            if (snippet.isNotEmpty())
+                "${i + 1}. [${a.source}]$datePart ${a.title}\n   $snippet"
+            else
+                "${i + 1}. [${a.source}]$datePart ${a.title}"
+        }.joinToString("\n\n")
 
         val feedbackPart = buildString {
             if (likedTitles.isNotEmpty())
