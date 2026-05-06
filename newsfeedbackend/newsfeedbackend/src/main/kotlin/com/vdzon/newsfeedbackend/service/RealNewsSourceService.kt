@@ -38,6 +38,8 @@ class RealNewsSourceService(
         feedback: FeedbackContext = FeedbackContext(),
         onArticle: (NewsItem) -> Unit = {}
     ): DailyFetchResult {
+        log.info("Fetch daily news, START")
+
         val allItems = mutableListOf<NewsItem>()
         val categoryResults = mutableListOf<CategoryResult>()
         var totalCost = 0.0
@@ -57,6 +59,7 @@ class RealNewsSourceService(
 
         // Process each enabled non-system category
         enabledCategories.forEach { cat ->
+            log.info("Process categorie '{}'", cat.name)
             val available = filtered.filter { it.url !in seenUrls }
             log.info("Categorie '{}': {} beschikbaar na deduplicatie", cat.name, available.size)
 
@@ -65,6 +68,7 @@ class RealNewsSourceService(
                 return@forEach
             }
 
+            log.info("Select articles for categorie '{}'", cat.name)
             val (items, cost) = selectExtractAndSummarize(
                 articles = available,
                 subject = cat.name,
@@ -75,6 +79,7 @@ class RealNewsSourceService(
                 feedback = feedback,
                 onArticle = onArticle
             )
+            log.info("{} articles are seclted for categorie '{}'",items.size,  cat.name)
 
             items.forEach { seenUrls.add(it.url) }
             allItems.addAll(items)
@@ -105,6 +110,7 @@ class RealNewsSourceService(
                 log.error("Dagelijks overzicht mislukt: {}", e.message)
             }
         }
+        log.info("Fetch daily news, Finished")
 
         return DailyFetchResult(allItems, categoryResults, totalCost)
     }
@@ -161,6 +167,7 @@ class RealNewsSourceService(
         var totalCost = 0.0
 
         // Claude selecteert de meest relevante artikelen
+        log.info("Using AI for finding articles")
         val (selectedIndices, selectionCost) = anthropicService.selectArticles(
             articles = articles,
             categoryName = subject,
@@ -172,6 +179,7 @@ class RealNewsSourceService(
             topicHistoryContext = feedback.topicHistoryContext
         )
         totalCost += selectionCost
+        log.info("Selected ${selectedIndices.size} articles")
 
         if (selectedIndices.isEmpty()) {
             log.warn("Geen artikelen geselecteerd voor '{}'", subject)
@@ -180,6 +188,7 @@ class RealNewsSourceService(
 
         // Tavily haalt volledige tekst op voor geselecteerde URLs
         val selectedResults = selectedIndices.map { articles[it] }
+        log.info("Extract content using tavily")
         val extractedContent = tavilyService.extractContent(selectedResults.map { it.url })
 
         val publishedDateByUrl = selectedResults.associate { result ->
@@ -201,12 +210,13 @@ class RealNewsSourceService(
         val newsItems = mutableListOf<NewsItem>()
 
         tavilyArticles.forEach { article ->
-            log.info("Samenvatting voor '{}' ({})", article.title.take(40), subject)
+            log.info("Start samenvatting voor '{}' ({})", article.title.take(40), subject)
             val (summarized, cost) = anthropicService.summarizeArticle(article, subject)
             val item = summarized.toNewsItem(categoryId, now, publishedDateByUrl[article.url])
             onArticle(item)
             newsItems.add(item)
             totalCost += cost
+            log.info("Finished samenvatting voor '{}' ({})", article.title.take(40), subject)
         }
 
         return Pair(newsItems, totalCost)
