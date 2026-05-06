@@ -15,13 +15,6 @@ data class DailyFetchResult(
     val totalCostUsd: Double
 )
 
-data class FetchAndSummarizeResult(
-    val items: List<NewsItem>,
-    val costUsd: Double,
-    val searchResultCount: Int,
-    val filteredCount: Int
-)
-
 data class FeedbackContext(
     val likedTitles: List<String> = emptyList(),
     val dislikedTitles: List<String> = emptyList(),
@@ -30,9 +23,6 @@ data class FeedbackContext(
 )
 
 private val SYSTEM_CATEGORY_IDS = setOf("overig")
-private const val SEARCH_POOL_SIZE = 20   // Tavily max = 20 per call
-private const val RSS_PREFERRED_COUNT = 5
-private const val RSS_MAX_COUNT = 10
 
 @Service
 class RealNewsSourceService(
@@ -53,78 +43,57 @@ class RealNewsSourceService(
         var totalCost = 0.0
 
         val enabledCategories = categories.filter { it.enabled && !it.isSystem && it.id !in SYSTEM_CATEGORY_IDS }
-        val skipped = enabledCategories.filter { it.websites.isEmpty() }
-        if (skipped.isNotEmpty()) {
-            log.info("Categorieën overgeslagen (geen bronnen geconfigureerd): {}",
-                skipped.joinToString { it.name })
-        }
-        val categoriesWithSources = enabledCategories.filter { it.websites.isNotEmpty() }
 
-        // ── Tavily pipeline per categorie ─────────────────────────────────────
-        categoriesWithSources.forEach { cat ->
-            val result = fetchAndSummarize(
+        // Fetch all RSS articles once
+        val allRssArticles = rssFetchService.fetchAll(rssUrls)
+        log.info("RSS totaal: {} artikelen van {} feeds", allRssArticles.size, rssUrls.size)
+
+        // Apply date filter (1 day)
+        val filtered = filterByDate(allRssArticles, 1)
+        log.info("RSS na datum-filter (1 dag): {} artikelen", filtered.size)
+
+        // Track seen URLs for deduplication across categories
+        val seenUrls = mutableSetOf<String>()
+
+        // Process each enabled non-system category
+        enabledCategories.forEach { cat ->
+            val available = filtered.filter { it.url !in seenUrls }
+            log.info("Categorie '{}': {} beschikbaar na deduplicatie", cat.name, available.size)
+
+            if (available.isEmpty()) {
+                log.warn("Geen artikelen beschikbaar voor categorie '{}'", cat.name)
+                return@forEach
+            }
+
+            val (items, cost) = selectExtractAndSummarize(
+                articles = available,
                 subject = cat.name,
                 extraInstructions = cat.extraInstructions,
                 preferredCount = cat.preferredCount,
                 maxCount = cat.maxCount,
                 categoryId = cat.id,
-                websites = cat.websites,
                 feedback = feedback,
-                searchDays = 1,
                 onArticle = onArticle
             )
-            allItems.addAll(result.items)
-            totalCost += result.costUsd
+
+            items.forEach { seenUrls.add(it.url) }
+            allItems.addAll(items)
+            totalCost += cost
             categoryResults.add(CategoryResult(
                 categoryId = cat.id,
                 categoryName = cat.name,
-                articleCount = result.items.size,
-                costUsd = result.costUsd,
-                searchResultCount = result.searchResultCount,
-                filteredCount = result.filteredCount
+                articleCount = items.size,
+                costUsd = cost,
+                searchResultCount = filtered.size,
+                filteredCount = available.size
             ))
-            log.info("Categorie '{}': {} gevonden, {} na filter, {} toegevoegd, kosten \${}",
-                cat.name, result.searchResultCount, result.filteredCount, result.items.size,
-                "%.5f".format(result.costUsd))
+            log.info("Categorie '{}': {} toegevoegd, kosten \${}",
+                cat.name, items.size, "%.5f".format(cost))
         }
 
-        // ── RSS pipeline ──────────────────────────────────────────────────────
-        if (rssUrls.isNotEmpty()) {
-            try {
-                log.info("RSS pipeline starten: {} feeds", rssUrls.size)
-                val rssResult = fetchFromRssFeeds(
-                    rssUrls = rssUrls,
-                    categories = enabledCategories,
-                    maxAgeDays = 1,
-                    preferredCount = RSS_PREFERRED_COUNT,
-                    maxCount = RSS_MAX_COUNT,
-                    feedback = feedback,
-                    onArticle = onArticle
-                )
-                if (rssResult.items.isNotEmpty()) {
-                    allItems.addAll(rssResult.items)
-                    totalCost += rssResult.costUsd
-                    categoryResults.add(CategoryResult(
-                        categoryId = "rss",
-                        categoryName = "RSS Feeds",
-                        articleCount = rssResult.items.size,
-                        costUsd = rssResult.costUsd,
-                        searchResultCount = rssResult.searchResultCount,
-                        filteredCount = rssResult.filteredCount
-                    ))
-                    log.info("RSS: {} gevonden, {} na filter, {} toegevoegd, kosten \${}",
-                        rssResult.searchResultCount, rssResult.filteredCount, rssResult.items.size,
-                        "%.5f".format(rssResult.costUsd))
-                }
-            } catch (e: Exception) {
-                log.error("RSS pipeline mislukt: {}", e.message)
-            }
-        }
-
-        // ── Dagelijks overzicht ───────────────────────────────────────────────
+        // Dagelijks overzicht
         if (allItems.isNotEmpty()) {
-            val categoryNames = (categoriesWithSources.map { it.name } +
-                if (rssUrls.isNotEmpty()) listOf("RSS Feeds") else emptyList())
+            val categoryNames = enabledCategories.map { it.name }
             try {
                 log.info("Dagelijks overzicht genereren op basis van {} artikelen", allItems.size)
                 val (summaryItem, summaryCost) = anthropicService.generateDailySummary(allItems, categoryNames)
@@ -151,187 +120,49 @@ class RealNewsSourceService(
         onArticle: (NewsItem) -> Unit = {}
     ): Pair<List<NewsItem>, Double> {
         val categoryId = detectCategory(subject, categories)
-        val categoryWebsites = categories.firstOrNull { it.id == categoryId }?.websites ?: emptyList()
 
-        // ── Tavily pipeline ───────────────────────────────────────────────────
-        val tavilyResult = fetchAndSummarize(
+        // Fetch all RSS articles
+        val allRssArticles = rssFetchService.fetchAll(rssUrls)
+        log.info("RSS totaal voor '{}': {} artikelen", subject, allRssArticles.size)
+
+        // Apply date filter
+        val filtered = filterByDate(allRssArticles, maxAgeDays)
+        log.info("RSS na datum-filter ({} dagen) voor '{}': {} artikelen", maxAgeDays, subject, filtered.size)
+
+        if (filtered.isEmpty()) {
+            log.warn("Geen RSS artikelen beschikbaar voor '{}'", subject)
+            return Pair(emptyList(), 0.0)
+        }
+
+        return selectExtractAndSummarize(
+            articles = filtered,
             subject = subject,
             extraInstructions = extraInstructions,
             preferredCount = preferredCount,
             maxCount = preferredCount,
             categoryId = categoryId,
-            websites = categoryWebsites,
             feedback = feedback,
-            searchDays = maxAgeDays,
             onArticle = onArticle
         )
-        log.info("Tavily voor '{}': {} gevonden, {} na filter, {} toegevoegd, kosten \${}",
-            subject, tavilyResult.searchResultCount, tavilyResult.filteredCount,
-            tavilyResult.items.size, "%.5f".format(tavilyResult.costUsd))
-
-        var allItems = tavilyResult.items.toMutableList()
-        var totalCost = tavilyResult.costUsd
-
-        // ── RSS pipeline (aanvullend) ─────────────────────────────────────────
-        if (rssUrls.isNotEmpty()) {
-            try {
-                log.info("RSS feeds raadplegen als aanvulling voor '{}'", subject)
-                val rssArticles = rssFetchService.fetchAll(rssUrls)
-                if (rssArticles.isNotEmpty()) {
-                    val rssResult = selectExtractAndSummarize(
-                        searchResults = rssArticles,
-                        subject = subject,
-                        extraInstructions = extraInstructions,
-                        preferredCount = minOf(preferredCount, 3),
-                        maxCount = preferredCount,
-                        categoryId = categoryId,
-                        feedback = feedback,
-                        searchDays = maxAgeDays,
-                        onArticle = onArticle
-                    )
-                    allItems.addAll(rssResult.items)
-                    totalCost += rssResult.costUsd
-                    log.info("RSS voor '{}': {} gevonden, {} na filter, {} toegevoegd",
-                        subject, rssResult.searchResultCount, rssResult.filteredCount, rssResult.items.size)
-                }
-            } catch (e: Exception) {
-                log.error("RSS aanvulling mislukt voor '{}': {}", subject, e.message)
-            }
-        }
-
-        return Pair(allItems, totalCost)
     }
 
-    // ── RSS fetch + select + summarize ────────────────────────────────────────
-
-    private fun fetchFromRssFeeds(
-        rssUrls: List<String>,
-        categories: List<CategorySettings>,
-        maxAgeDays: Int,
-        preferredCount: Int,
-        maxCount: Int,
-        feedback: FeedbackContext,
-        onArticle: (NewsItem) -> Unit
-    ): FetchAndSummarizeResult {
-        val allRssArticles = rssFetchService.fetchAll(rssUrls)
-        if (allRssArticles.isEmpty()) {
-            log.warn("Geen RSS artikelen opgehaald")
-            return FetchAndSummarizeResult(emptyList(), 0.0, 0, 0)
-        }
-        log.info("RSS totaal: {} artikelen van {} feeds", allRssArticles.size, rssUrls.size)
-
-        val categoryNames = categories.filter { !it.isSystem }.joinToString(", ") { it.name }
-        val subject = "tech nieuws (onderwerpen: $categoryNames)"
-
-        // Verzamel items met juiste categorie via de callback
-        val capturedItems = mutableListOf<NewsItem>()
-        val result = selectExtractAndSummarize(
-            searchResults = allRssArticles,
-            subject = subject,
-            extraInstructions = "",
-            preferredCount = preferredCount,
-            maxCount = maxCount,
-            categoryId = "overig",  // tijdelijk; wordt hieronder per artikel bepaald
-            feedback = feedback,
-            searchDays = maxAgeDays,
-            onArticle = { item ->
-                val detectedCategory = detectCategory(item.title, categories)
-                val categorizedItem = item.copy(category = detectedCategory)
-                capturedItems.add(categorizedItem)
-                onArticle(categorizedItem)
-            }
-        )
-
-        return result.copy(items = capturedItems)
-    }
-
-    // ── Gedeeld: query → zoek (Tavily) ────────────────────────────────────────
-
-    private fun fetchAndSummarize(
-        subject: String,
-        extraInstructions: String,
-        preferredCount: Int,
-        maxCount: Int,
-        categoryId: String,
-        websites: List<String> = emptyList(),
-        feedback: FeedbackContext,
-        searchDays: Int = 2,
-        onArticle: (NewsItem) -> Unit
-    ): FetchAndSummarizeResult {
-        // Stap 1: Claude genereert een gerichte Engelse zoekquery
-        log.info("Zoekquery genereren voor '{}'", subject)
-        val query = anthropicService.generateSearchQuery(
-            categoryName = subject,
-            extraInstructions = extraInstructions,
-            likedTitles = feedback.likedTitles,
-            dislikedTitles = feedback.dislikedTitles
-        )
-
-        // Stap 2: Per bron een aparte Tavily-call
-        val searchResults: List<TavilySearchResult>
-        if (websites.isNotEmpty()) {
-            val seenUrls = mutableSetOf<String>()
-            val merged = mutableListOf<TavilySearchResult>()
-            websites.forEach { site ->
-                val siteResults = tavilyService.search(
-                    query = query,
-                    maxResults = SEARCH_POOL_SIZE,
-                    days = searchDays,
-                    includeDomains = listOf(site)
-                )
-                var added = 0
-                siteResults.forEach { r ->
-                    if (seenUrls.add(r.url)) { merged.add(r); added++ }
-                }
-                log.info("  Bron '{}': {} resultaten", site, added)
-            }
-            log.info("Tavily totaal voor '{}': {} unieke resultaten van {} bronnen",
-                subject, merged.size, websites.size)
-            if (merged.isEmpty()) return FetchAndSummarizeResult(emptyList(), 0.0, 0, 0)
-            return selectExtractAndSummarize(merged, subject, extraInstructions,
-                preferredCount, maxCount, categoryId, feedback, searchDays, onArticle)
-        } else {
-            val results = tavilyService.search(query = query, maxResults = SEARCH_POOL_SIZE, days = searchDays)
-            if (results.isEmpty()) {
-                log.warn("Geen zoekresultaten voor '{}'", subject)
-                return FetchAndSummarizeResult(emptyList(), 0.0, 0, 0)
-            }
-            return selectExtractAndSummarize(results, subject, extraInstructions,
-                preferredCount, maxCount, categoryId, feedback, searchDays, onArticle)
-        }
-    }
-
-    // ── Gedeeld: datum-filter → selecteer → extract → vat samen ──────────────
+    // ── Selecteer → extract → vat samen ──────────────────────────────────────
 
     private fun selectExtractAndSummarize(
-        searchResults: List<TavilySearchResult>,
+        articles: List<TavilySearchResult>,
         subject: String,
         extraInstructions: String,
         preferredCount: Int,
         maxCount: Int,
         categoryId: String,
         feedback: FeedbackContext,
-        searchDays: Int,
         onArticle: (NewsItem) -> Unit
-    ): FetchAndSummarizeResult {
+    ): Pair<List<NewsItem>, Double> {
         var totalCost = 0.0
-        val searchResultCount = searchResults.size
-
-        // Harde datum-filter
-        val filtered = filterByDate(searchResults, searchDays)
-        val filteredCount = filtered.size
-        if (filteredCount < searchResultCount) {
-            log.info("Datum-filter: {}/{} artikelen bewaard voor '{}' (max {} dagen oud)",
-                filteredCount, searchResultCount, subject, searchDays)
-        }
-        if (filtered.isEmpty()) {
-            log.warn("Geen artikelen over na datum-filter voor '{}'", subject)
-            return FetchAndSummarizeResult(emptyList(), 0.0, searchResultCount, 0)
-        }
 
         // Claude selecteert de meest relevante artikelen
         val (selectedIndices, selectionCost) = anthropicService.selectArticles(
-            articles = filtered,
+            articles = articles,
             categoryName = subject,
             extraInstructions = extraInstructions,
             preferredCount = preferredCount,
@@ -344,19 +175,19 @@ class RealNewsSourceService(
 
         if (selectedIndices.isEmpty()) {
             log.warn("Geen artikelen geselecteerd voor '{}'", subject)
-            return FetchAndSummarizeResult(emptyList(), totalCost, searchResultCount, filteredCount)
+            return Pair(emptyList(), totalCost)
         }
 
         // Tavily haalt volledige tekst op voor geselecteerde URLs
-        val selectedResults = selectedIndices.map { filtered[it] }
+        val selectedResults = selectedIndices.map { articles[it] }
         val extractedContent = tavilyService.extractContent(selectedResults.map { it.url })
 
         val publishedDateByUrl = selectedResults.associate { result ->
             result.url to (result.publishedDate ?: extractDateFromUrl(result.url))
         }.filterValues { it != null }.mapValues { it.value!! }
 
-        // Gebruik volledige tekst indien beschikbaar, anders snippet (RSS of Tavily)
-        val articles = selectedResults.map { result ->
+        // Gebruik volledige tekst indien beschikbaar, anders RSS snippet als fallback
+        val tavilyArticles = selectedResults.map { result ->
             TavilyArticle(
                 title   = result.title,
                 url     = result.url,
@@ -369,7 +200,7 @@ class RealNewsSourceService(
         val now = Instant.now().toString()
         val newsItems = mutableListOf<NewsItem>()
 
-        articles.forEach { article ->
+        tavilyArticles.forEach { article ->
             log.info("Samenvatting voor '{}' ({})", article.title.take(40), subject)
             val (summarized, cost) = anthropicService.summarizeArticle(article, subject)
             val item = summarized.toNewsItem(categoryId, now, publishedDateByUrl[article.url])
@@ -378,7 +209,7 @@ class RealNewsSourceService(
             totalCost += cost
         }
 
-        return FetchAndSummarizeResult(newsItems, totalCost, searchResultCount, filteredCount)
+        return Pair(newsItems, totalCost)
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

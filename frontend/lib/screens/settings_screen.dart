@@ -230,10 +230,6 @@ class _EditCategoryDialogState extends ConsumerState<_EditCategoryDialog> {
   late TextEditingController _extraController;
   late TextEditingController _preferredController;
   late TextEditingController _maxController;
-  late TextEditingController _websiteController;
-  late List<String> _websites;
-  bool _suggestingWebsites = false;
-
   @override
   void initState() {
     super.initState();
@@ -241,8 +237,6 @@ class _EditCategoryDialogState extends ConsumerState<_EditCategoryDialog> {
     _extraController = TextEditingController(text: widget.category.extraInstructions);
     _preferredController = TextEditingController(text: '${widget.category.preferredCount}');
     _maxController = TextEditingController(text: '${widget.category.maxCount}');
-    _websiteController = TextEditingController();
-    _websites = List.from(widget.category.websites);
   }
 
   @override
@@ -251,7 +245,6 @@ class _EditCategoryDialogState extends ConsumerState<_EditCategoryDialog> {
     _extraController.dispose();
     _preferredController.dispose();
     _maxController.dispose();
-    _websiteController.dispose();
     super.dispose();
   }
 
@@ -266,38 +259,7 @@ class _EditCategoryDialogState extends ConsumerState<_EditCategoryDialog> {
     final preferred = int.tryParse(_preferredController.text) ?? widget.category.preferredCount;
     final max = int.tryParse(_maxController.text) ?? widget.category.maxCount;
     notifier.updateCounts(id, preferred, max.clamp(preferred, 99));
-    notifier.updateWebsites(id, _websites);
     Navigator.of(context).pop();
-  }
-
-  void _addWebsite() {
-    final domain = _websiteController.text.trim().toLowerCase()
-        .replaceAll(RegExp(r'^https?://'), '')
-        .replaceAll(RegExp(r'/.*'), '');
-    if (domain.isNotEmpty && !_websites.contains(domain)) {
-      setState(() {
-        _websites.add(domain);
-        _websiteController.clear();
-      });
-    }
-  }
-
-  Future<void> _suggestWebsites() async {
-    setState(() => _suggestingWebsites = true);
-    try {
-      final suggested = await ref
-          .read(settingsProvider.notifier)
-          .suggestWebsites(widget.category.id);
-      if (suggested.isNotEmpty && mounted) {
-        setState(() {
-          for (final s in suggested) {
-            if (!_websites.contains(s)) _websites.add(s);
-          }
-        });
-      }
-    } finally {
-      if (mounted) setState(() => _suggestingWebsites = false);
-    }
   }
 
   void _delete() {
@@ -411,89 +373,6 @@ class _EditCategoryDialogState extends ConsumerState<_EditCategoryDialog> {
                     ),
                     keyboardType: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-
-            // Websites sectie
-            Row(
-              children: [
-                Text(
-                  'Nieuwswebsites',
-                  style: Theme.of(context).textTheme.labelLarge,
-                ),
-                const Spacer(),
-                _suggestingWebsites
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : TextButton.icon(
-                        onPressed: _suggestWebsites,
-                        icon: const Icon(Icons.auto_awesome, size: 16),
-                        label: const Text('Stel voor'),
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          visualDensity: VisualDensity.compact,
-                        ),
-                      ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            if (_websites.isEmpty)
-              Text(
-                'Geen websites — Tavily zoekt breed',
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: Colors.grey[500], fontStyle: FontStyle.italic),
-              )
-            else
-              Wrap(
-                spacing: 6,
-                runSpacing: 4,
-                children: _websites
-                    .map((w) => Chip(
-                          label: Text(w,
-                              style: const TextStyle(fontSize: 11)),
-                          onDeleted: () =>
-                              setState(() => _websites.remove(w)),
-                          materialTapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
-                          padding: EdgeInsets.zero,
-                          labelPadding:
-                              const EdgeInsets.symmetric(horizontal: 6),
-                        ))
-                    .toList(),
-              ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _websiteController,
-                    decoration: const InputDecoration(
-                      hintText: 'bv. blog.jetbrains.com',
-                      isDense: true,
-                      border: OutlineInputBorder(),
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    ),
-                    style: const TextStyle(fontSize: 13),
-                    onSubmitted: (_) => _addWebsite(),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  onPressed: _addWebsite,
-                  icon: const Icon(Icons.add),
-                  tooltip: 'Toevoegen',
-                  style: IconButton.styleFrom(
-                    backgroundColor:
-                        Theme.of(context).colorScheme.primaryContainer,
                   ),
                 ),
               ],

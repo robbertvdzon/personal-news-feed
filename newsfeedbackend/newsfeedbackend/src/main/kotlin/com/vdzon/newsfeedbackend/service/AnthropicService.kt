@@ -83,7 +83,7 @@ class AnthropicService(
         val today = LocalDate.now()
         val articleList = articles.mapIndexed { i, a ->
             val datePart = if (a.publishedDate != null) "\n   Published: ${a.publishedDate}" else ""
-            "${i + 1}. Title: \"${a.title}\"$datePart\n   Snippet: ${a.snippet.take(200)}"
+            "${i + 1}. Title: \"${a.title}\"$datePart\n   Snippet: ${a.snippet.take(500)}"
         }.joinToString("\n\n")
 
         val prompt = """

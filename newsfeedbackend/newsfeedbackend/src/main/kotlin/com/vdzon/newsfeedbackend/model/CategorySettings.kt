@@ -7,6 +7,5 @@ data class CategorySettings(
     val extraInstructions: String = "",
     val isSystem: Boolean = false,
     val preferredCount: Int = 3,
-    val maxCount: Int = 5,
-    val websites: List<String> = emptyList()   // lege lijst = geen domein-filter
+    val maxCount: Int = 5
 )

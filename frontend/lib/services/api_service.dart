@@ -55,16 +55,6 @@ class ApiService {
     return list.map((e) => Category.fromJson(e as Map<String, dynamic>)).toList();
   }
 
-  static Future<List<String>> suggestWebsites(String categoryId) async {
-    final response = await _client.post(
-      Uri.parse('${AppConfig.apiBaseUrl}/api/settings/suggest-websites/$categoryId'),
-      headers: _headers,
-    );
-    if (response.statusCode != 200) return [];
-    final list = jsonDecode(response.body) as List<dynamic>;
-    return list.map((e) => e as String).toList();
-  }
-
   static Future<void> saveSettings(List<Category> categories) async {
     await _client.put(
       Uri.parse('${AppConfig.apiBaseUrl}/api/settings'),
