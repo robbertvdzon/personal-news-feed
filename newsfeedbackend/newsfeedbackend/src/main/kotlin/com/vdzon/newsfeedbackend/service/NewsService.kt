@@ -105,6 +105,7 @@ class NewsService(
     fun refresh(username: String) {
         log.info("Nieuws verversen voor gebruiker: {}", username)
         val categories = settingsService.getSettings(username)
+        val rssUrls = storageService.loadRssFeeds(username).feeds
         try {
             val feedback = FeedbackContext(
                 likedTitles = getLikedItems(username).map { it.title }.take(10),
@@ -114,6 +115,7 @@ class NewsService(
             val savedItems = mutableListOf<NewsItem>()
             val fetchResult = realNewsSourceService.fetchDailyNews(
                 categories = categories,
+                rssUrls = rssUrls,
                 feedback = feedback,
                 onArticle = { item ->
                     // Direct opslaan zodat het meteen zichtbaar is in de feed

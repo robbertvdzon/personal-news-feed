@@ -32,6 +32,7 @@ class RequestProcessor(
         updateStatus(username, request.id, RequestStatus.PROCESSING)
         try {
             val categories = settingsService.getSettings(username)
+            val rssUrls = storageService.loadRssFeeds(username).feeds
             val feedback = loadFeedback(username)
             val (articles, costUsd) = realNewsSourceService.fetchArticlesForSubject(
                 subject = request.subject,
@@ -39,6 +40,7 @@ class RequestProcessor(
                 extraInstructions = request.extraInstructions,
                 maxAgeDays = request.maxAgeDays,
                 categories = categories,
+                rssUrls = rssUrls,
                 feedback = feedback,
                 onArticle = { item ->
                     newsService.addItems(username, listOf(item))
@@ -62,9 +64,11 @@ class RequestProcessor(
         updateStatus(username, requestId, RequestStatus.PROCESSING)
         try {
             val categories = settingsService.getSettings(username)
+            val rssUrls = storageService.loadRssFeeds(username).feeds
             val feedback = loadFeedback(username)
             val fetchResult = realNewsSourceService.fetchDailyNews(
                 categories = categories,
+                rssUrls = rssUrls,
                 feedback = feedback,
                 onArticle = { item ->
                     newsService.addItems(username, listOf(item))
