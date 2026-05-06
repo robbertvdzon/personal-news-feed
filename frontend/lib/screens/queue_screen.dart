@@ -16,6 +16,13 @@ class QueueScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Verzoeken'),
         centerTitle: false,
+        actions: [
+          IconButton(
+            tooltip: 'Vernieuwen',
+            icon: const Icon(Icons.refresh),
+            onPressed: () => ref.read(requestProvider.notifier).refresh(),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showAddDialog(context, ref),
@@ -204,8 +211,28 @@ class _DailyUpdateTile extends ConsumerWidget {
                         _ElapsedTimeText(since: request.processingStartedAt ?? request.createdAt),
                       ],
                     ),
+                  if (request.status == RequestStatus.processing ||
+                      request.status == RequestStatus.pending) ...[
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () => ref.read(requestProvider.notifier).cancelRequest(request.id),
+                      child: Row(
+                        children: [
+                          Icon(Icons.stop_circle_outlined, size: 14, color: Colors.red[400]),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Annuleren',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: Colors.red[400],
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   if (request.status == RequestStatus.done ||
-                      request.status == RequestStatus.failed) ...[
+                      request.status == RequestStatus.failed ||
+                      request.status == RequestStatus.cancelled) ...[
                     const SizedBox(width: 8),
                     GestureDetector(
                       onTap: () => ref.read(requestProvider.notifier).rerunRequest(request),
@@ -317,7 +344,9 @@ class _DailyUpdateTile extends ConsumerWidget {
             onPressed: () => Navigator.pop(context),
             child: const Text('Sluiten'),
           ),
-          if (request.status == RequestStatus.done || request.status == RequestStatus.failed)
+          if (request.status == RequestStatus.done ||
+              request.status == RequestStatus.failed ||
+              request.status == RequestStatus.cancelled)
             FilledButton.icon(
               onPressed: () {
                 Navigator.pop(context);
@@ -471,8 +500,28 @@ class _RequestTile extends ConsumerWidget {
                         _ElapsedTimeText(since: request.processingStartedAt ?? request.createdAt),
                       ],
                     ),
+                  if (request.status == RequestStatus.processing ||
+                      request.status == RequestStatus.pending) ...[
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () => ref.read(requestProvider.notifier).cancelRequest(request.id),
+                      child: Row(
+                        children: [
+                          Icon(Icons.stop_circle_outlined, size: 14, color: Colors.red[400]),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Annuleren',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: Colors.red[400],
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   if (request.status == RequestStatus.done ||
-                      request.status == RequestStatus.failed) ...[
+                      request.status == RequestStatus.failed ||
+                      request.status == RequestStatus.cancelled) ...[
                     const SizedBox(width: 8),
                     GestureDetector(
                       onTap: () => ref.read(requestProvider.notifier).rerunRequest(request),
@@ -567,7 +616,9 @@ class _RequestTile extends ConsumerWidget {
             onPressed: () => Navigator.pop(context),
             child: const Text('Sluiten'),
           ),
-          if (request.status == RequestStatus.done || request.status == RequestStatus.failed)
+          if (request.status == RequestStatus.done ||
+              request.status == RequestStatus.failed ||
+              request.status == RequestStatus.cancelled)
             FilledButton.icon(
               onPressed: () {
                 Navigator.pop(context);
@@ -605,6 +656,7 @@ class _StatusIcon extends StatelessWidget {
       RequestStatus.processing => (Icons.sync, Colors.orange),
       RequestStatus.done => (Icons.check_circle, Colors.green),
       RequestStatus.failed => (Icons.error_outline, Colors.red),
+      RequestStatus.cancelled => (Icons.cancel_outlined, Colors.grey),
     };
     return Icon(icon, color: color, size: 20);
   }
@@ -622,6 +674,7 @@ class _StatusChip extends StatelessWidget {
       RequestStatus.processing => ('Verwerken', Colors.orange[50]!, Colors.orange[800]!),
       RequestStatus.done => ('Klaar', Colors.green[50]!, Colors.green[800]!),
       RequestStatus.failed => ('Mislukt', Colors.red[50]!, Colors.red[800]!),
+      RequestStatus.cancelled => ('Geannuleerd', Colors.grey[100]!, Colors.grey[600]!),
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),

@@ -201,7 +201,8 @@ class RealNewsSourceService(
                 title   = result.title,
                 url     = result.url,
                 source  = result.source,
-                content = extractedContent[result.url]?.takeIf { it.length > 200 } ?: result.snippet
+                content = extractedContent[result.url]?.takeIf { it.length > 200 } ?: result.snippet,
+                feedUrl = result.feedUrl
             )
         }
 
@@ -272,6 +273,7 @@ class RealNewsSourceService(
         category = category,
         timestamp = timestamp,
         source = source,
-        publishedDate = publishedDate
+        publishedDate = publishedDate,
+        feedUrl = feedUrl
     )
 }

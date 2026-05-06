@@ -11,6 +11,7 @@ class NewsItem {
   final bool? liked; // null = geen feedback, true = geliked, false = gedisliked
   final bool isSummary;
   final DateTime? publishedDate;
+  final String? feedUrl;
 
   const NewsItem({
     required this.id,
@@ -25,6 +26,7 @@ class NewsItem {
     this.liked,
     this.isSummary = false,
     this.publishedDate,
+    this.feedUrl,
   });
 
   factory NewsItem.fromJson(Map<String, dynamic> json) {
@@ -43,6 +45,7 @@ class NewsItem {
       publishedDate: json['publishedDate'] != null
           ? DateTime.tryParse(json['publishedDate'] as String)
           : null,
+      feedUrl: json['feedUrl'] as String?,
     );
   }
 
@@ -59,6 +62,7 @@ class NewsItem {
         liked: liked == _sentinel ? this.liked : liked as bool?,
         isSummary: isSummary ?? this.isSummary,
         publishedDate: publishedDate,
+        feedUrl: feedUrl,
       );
 }
 

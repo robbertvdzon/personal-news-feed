@@ -81,6 +81,18 @@ class ReadItemsNotifier extends Notifier<Set<String>> {
     updated[index] = updated[index].copyWith(isRead: true);
     ref.read(newsProvider.notifier).setItems(updated);
   }
+
+  Future<void> markUnread(String itemId) async {
+    state = {...state}..remove(itemId);
+    await ApiService.markUnread(itemId);
+    final items = ref.read(newsProvider).valueOrNull;
+    if (items == null) return;
+    final index = items.indexWhere((i) => i.id == itemId);
+    if (index == -1) return;
+    final updated = [...items];
+    updated[index] = updated[index].copyWith(isRead: false);
+    ref.read(newsProvider.notifier).setItems(updated);
+  }
 }
 
 final readItemsProvider =
@@ -140,11 +152,13 @@ class NewsNotifier extends AsyncNotifier<List<NewsItem>> {
     required int olderThanDays,
     required bool keepStarred,
     required bool keepLiked,
+    required bool keepUnread,
   }) async {
     final removed = await ApiService.cleanupNews(
       olderThanDays: olderThanDays,
       keepStarred: keepStarred,
       keepLiked: keepLiked,
+      keepUnread: keepUnread,
     );
     if (removed > 0) await refresh();
     return removed;
@@ -214,7 +228,6 @@ final filteredNewsProvider = Provider<List<NewsItem>>((ref) {
   return items
       .where((item) => item.isSummary || enabledIds.contains(item.category))
       .where((item) =>
-          item.isSummary ||
           selectedCategory == null ||
           item.category == selectedCategory)
       .where((item) => showRead || !readItems.contains(item.id))

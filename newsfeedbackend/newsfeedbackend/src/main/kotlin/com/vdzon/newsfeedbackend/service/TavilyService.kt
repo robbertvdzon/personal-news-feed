@@ -12,14 +12,16 @@ data class TavilySearchResult(
     val url: String,
     val source: String,
     val snippet: String,   // kort stukje tekst van de zoekresultaten (geen volledig artikel)
-    val publishedDate: String? = null  // publicatiedatum van het artikel (bijv. "2025-05-04")
+    val publishedDate: String? = null,  // publicatiedatum van het artikel (bijv. "2025-05-04")
+    val feedUrl: String? = null         // URL van de RSS feed waaruit dit artikel komt
 )
 
 data class TavilyArticle(
     val title: String,
     val url: String,
     val source: String,
-    val content: String   // volledige artikel tekst (via /extract)
+    val content: String,   // volledige artikel tekst (via /extract)
+    val feedUrl: String? = null         // URL van de RSS feed waaruit dit artikel komt
 )
 
 @Service

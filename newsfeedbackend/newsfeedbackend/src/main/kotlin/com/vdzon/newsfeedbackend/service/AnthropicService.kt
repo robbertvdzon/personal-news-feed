@@ -17,7 +17,8 @@ data class SummarizedArticle(
     val title: String,
     val summary: String,
     val url: String,
-    val source: String
+    val source: String,
+    val feedUrl: String? = null
 )
 
 data class ClaudeSearchResult(
@@ -442,11 +443,11 @@ class AnthropicService(
         return try {
             val result = objectMapper.readValue<SummarizedArticle>(json)
             log.info("Samenvatting klaar voor '{}'", result.title.take(50))
-            // Source altijd van het originele artikel (voorkomt dat Claude hem overschrijft)
-            Pair(result.copy(source = article.source), cost)
+            // Source en feedUrl altijd van het originele artikel (voorkomt dat Claude ze overschrijft)
+            Pair(result.copy(source = article.source, feedUrl = article.feedUrl), cost)
         } catch (e: Exception) {
             log.error("JSON parsen mislukt voor '{}': {}", article.title, e.message)
-            Pair(SummarizedArticle(article.title, article.content.take(500), article.url, article.source), cost)
+            Pair(SummarizedArticle(article.title, article.content.take(500), article.url, article.source, article.feedUrl), cost)
         }
     }
 

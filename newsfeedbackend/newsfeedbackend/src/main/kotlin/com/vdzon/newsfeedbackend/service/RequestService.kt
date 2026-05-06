@@ -4,6 +4,7 @@ import com.vdzon.newsfeedbackend.model.CreateRequestDto
 import com.vdzon.newsfeedbackend.model.NewsRequest
 import com.vdzon.newsfeedbackend.model.RequestStatus
 import com.vdzon.newsfeedbackend.websocket.RequestWebSocketHandler
+import jakarta.annotation.PostConstruct
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.time.Instant
@@ -18,6 +19,39 @@ class RequestService(
     private val webSocketHandler: RequestWebSocketHandler
 ) {
     private val log = LoggerFactory.getLogger(RequestService::class.java)
+
+    @PostConstruct
+    fun resetStuckRequests() {
+        val usernames = storageService.getAllUsernames()
+        for (username in usernames) {
+            val requests = storageService.loadRequests(username).toMutableList()
+            val stuck = requests.filter { it.status == RequestStatus.PROCESSING || it.status == RequestStatus.PENDING }
+            if (stuck.isEmpty()) continue
+            val reset = requests.map { req ->
+                if (req.status == RequestStatus.PROCESSING || req.status == RequestStatus.PENDING)
+                    req.copy(status = RequestStatus.FAILED, completedAt = Instant.now().toString())
+                else req
+            }
+            storageService.saveRequests(username, reset)
+            log.info("Herstart: {} vastgelopen verzoeken gereset naar FAILED voor {}", stuck.size, username)
+        }
+    }
+
+    fun cancel(username: String, id: String) {
+        val requests = storageService.loadRequests(username).toMutableList()
+        val index = requests.indexOfFirst { it.id == id }
+        if (index == -1) return
+        val current = requests[index]
+        if (current.status != RequestStatus.PROCESSING && current.status != RequestStatus.PENDING) return
+        // Markeer direct als CANCELLED in storage zodat de UI het ziet
+        val cancelled = current.copy(status = RequestStatus.CANCELLED, completedAt = Instant.now().toString())
+        requests[index] = cancelled
+        storageService.saveRequests(username, requests)
+        webSocketHandler.broadcast(cancelled)
+        // Signaleer de achtergrondthread om te stoppen
+        requestProcessor.markCancelled(id)
+        log.info("Verzoek '{}' geannuleerd voor {}", current.subject, username)
+    }
 
     fun getAll(username: String): List<NewsRequest> {
         ensureDailyUpdateExists(username)

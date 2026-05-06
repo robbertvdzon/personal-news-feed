@@ -63,12 +63,56 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
     final currentItem = widget.items[_currentIndex];
     final starredItems = ref.watch(starredItemsProvider);
     final isStarred = starredItems.contains(currentItem.id);
+    final readItems = ref.watch(readItemsProvider);
+    final isRead = readItems.contains(currentItem.id);
+    final feedback = ref.watch(feedbackProvider);
+    final liked = feedback[currentItem.id];
 
     return Scaffold(
       appBar: AppBar(
         title: Text('${_currentIndex + 1} / $total'),
         centerTitle: true,
         actions: [
+          IconButton(
+            tooltip: liked == true ? 'Verwijder interessant' : 'Interessant',
+            icon: Text(
+              '👍',
+              style: TextStyle(
+                fontSize: 18,
+                color: liked == true ? null : Colors.grey[400],
+              ),
+            ),
+            onPressed: () => ref
+                .read(feedbackProvider.notifier)
+                .setFeedback(currentItem.id, true),
+          ),
+          IconButton(
+            tooltip: liked == false ? 'Verwijder niet-relevant' : 'Niet relevant',
+            icon: Text(
+              '👎',
+              style: TextStyle(
+                fontSize: 18,
+                color: liked == false ? null : Colors.grey[400],
+              ),
+            ),
+            onPressed: () => ref
+                .read(feedbackProvider.notifier)
+                .setFeedback(currentItem.id, false),
+          ),
+          IconButton(
+            tooltip: isRead ? 'Markeer als ongelezen' : 'Markeer als gelezen',
+            icon: Icon(
+              isRead ? Icons.mark_email_unread_outlined : Icons.mark_email_read_outlined,
+              color: isRead ? Colors.blue[400] : null,
+            ),
+            onPressed: () {
+              if (isRead) {
+                ref.read(readItemsProvider.notifier).markUnread(currentItem.id);
+              } else {
+                ref.read(readItemsProvider.notifier).markRead(currentItem.id);
+              }
+            },
+          ),
           IconButton(
             tooltip: isStarred ? 'Verwijder uit bewaard' : 'Bewaar artikel',
             icon: Icon(
@@ -194,15 +238,14 @@ class _ArticlePage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final feedback = ref.watch(feedbackProvider);
-    final liked = feedback[item.id];
     final categories = ref.watch(settingsProvider).valueOrNull ?? [];
     final category = categories.firstWhere(
       (c) => c.id == item.category,
       orElse: () => categories.first,
     );
 
-    return SingleChildScrollView(
+    return SelectionArea(
+      child: SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -240,14 +283,29 @@ class _ArticlePage extends ConsumerWidget {
                     ),
               ),
               const SizedBox(width: 12),
-              Icon(Icons.source_outlined, size: 14, color: Colors.grey[400]),
-              const SizedBox(width: 4),
-              Text(
-                item.source,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Colors.grey[500],
-                      fontStyle: FontStyle.italic,
+              GestureDetector(
+                onTap: () {
+                  final feedUrl = item.feedUrl;
+                  if (feedUrl != null && feedUrl.isNotEmpty) {
+                    launchUrl(Uri.parse(feedUrl), mode: LaunchMode.externalApplication);
+                  } else {
+                    _openUrl(context);
+                  }
+                },
+                child: Row(
+                  children: [
+                    Icon(Icons.source_outlined, size: 14, color: Theme.of(context).colorScheme.primary.withOpacity(0.7)),
+                    const SizedBox(width: 4),
+                    Text(
+                      item.source,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.primary,
+                            fontStyle: FontStyle.italic,
+                            decoration: TextDecoration.underline,
+                          ),
                     ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -263,46 +321,12 @@ class _ArticlePage extends ConsumerWidget {
             url: item.url,
             onTap: () => _openUrl(context),
           ),
-          const SizedBox(height: 24),
-          const Divider(),
-          const SizedBox(height: 8),
-          Center(
-            child: Text(
-              'Wat vind je van dit artikel?',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.grey[600],
-                  ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _LargeFeedbackButton(
-                icon: '👍',
-                label: 'Interessant',
-                active: liked == true,
-                onTap: () => ref
-                    .read(feedbackProvider.notifier)
-                    .setFeedback(item.id, true),
-              ),
-              const SizedBox(width: 16),
-              _LargeFeedbackButton(
-                icon: '👎',
-                label: 'Niet relevant',
-                active: liked == false,
-                onTap: () => ref
-                    .read(feedbackProvider.notifier)
-                    .setFeedback(item.id, false),
-              ),
-            ],
-          ),
           const SizedBox(height: 16),
           _MeerHieroverButton(item: item),
           const SizedBox(height: 16),
         ],
       ),
-    );
+    )); // SelectionArea + SingleChildScrollView
   }
 }
 

@@ -15,5 +15,7 @@ data class NewsItem(
     /** Canonieke onderwerpen geëxtraheerd door Claude — gebruikt voor topic-geschiedenis */
     val topics: List<String> = emptyList(),
     /** Originele publicatiedatum van het artikel (van de bron), bijv. "2025-05-04" */
-    val publishedDate: String? = null
+    val publishedDate: String? = null,
+    /** URL van de RSS feed waaruit dit artikel komt */
+    val feedUrl: String? = null
 )

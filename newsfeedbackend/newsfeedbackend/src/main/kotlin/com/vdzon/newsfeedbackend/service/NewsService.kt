@@ -46,6 +46,14 @@ class NewsService(
         storageService.saveNews(username, items)
     }
 
+    fun markUnread(username: String, id: String) {
+        val items = storageService.loadNews(username).toMutableList()
+        val index = items.indexOfFirst { it.id == id }
+        if (index == -1) return
+        items[index] = items[index].copy(isRead = false)
+        storageService.saveNews(username, items)
+    }
+
     fun setFeedback(username: String, id: String, liked: Boolean?) {
         val items = storageService.loadNews(username).toMutableList()
         val index = items.indexOfFirst { it.id == id }
@@ -70,7 +78,7 @@ class NewsService(
         }
     }
 
-    fun cleanup(username: String, olderThanDays: Int, keepStarred: Boolean, keepLiked: Boolean): Int {
+    fun cleanup(username: String, olderThanDays: Int, keepStarred: Boolean, keepLiked: Boolean, keepUnread: Boolean): Int {
         val cutoff = java.time.Instant.now().minusSeconds(olderThanDays * 24L * 3600)
         val items = storageService.loadNews(username)
         val kept = items.filter { item ->
@@ -80,6 +88,7 @@ class NewsService(
             if (!isOld) return@filter true          // bewaar altijd recente items
             if (keepStarred && item.starred) return@filter true
             if (keepLiked && item.liked == true) return@filter true
+            if (keepUnread && !item.isRead) return@filter true
             false                                   // verwijder
         }
         val removed = items.size - kept.size

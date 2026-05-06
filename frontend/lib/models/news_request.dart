@@ -1,6 +1,6 @@
 import 'category_result.dart';
 
-enum RequestStatus { pending, processing, done, failed }
+enum RequestStatus { pending, processing, done, failed, cancelled }
 
 class NewsRequest {
   final String id;

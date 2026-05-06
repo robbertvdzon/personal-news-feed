@@ -51,7 +51,8 @@ class RequestNotifier extends AsyncNotifier<List<NewsRequest>> {
       final newList = [...current];
       newList[index] = updated;
       state = AsyncData(newList);
-      if (updated.status == RequestStatus.done) {
+      if (updated.status == RequestStatus.done ||
+          updated.status == RequestStatus.cancelled) {
         ref.read(newsProvider.notifier).refresh();
       }
     } catch (_) {}
@@ -123,6 +124,18 @@ class RequestNotifier extends AsyncNotifier<List<NewsRequest>> {
     final current = state.valueOrNull ?? [];
     state = AsyncData(current.where((r) => r.id != id).toList());
     await ApiService.deleteRequest(id);
+  }
+
+  Future<void> cancelRequest(String id) async {
+    // Optimistisch status zetten
+    final current = state.valueOrNull ?? [];
+    final index = current.indexWhere((r) => r.id == id);
+    if (index != -1) {
+      final newList = [...current];
+      newList[index] = newList[index].copyWith(status: RequestStatus.cancelled);
+      state = AsyncData(newList);
+    }
+    await ApiService.cancelRequest(id);
   }
 
   Future<void> rerunRequest(NewsRequest request) async {

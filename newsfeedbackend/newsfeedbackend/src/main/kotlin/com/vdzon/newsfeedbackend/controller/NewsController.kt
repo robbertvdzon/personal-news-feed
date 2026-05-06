@@ -2,6 +2,7 @@ package com.vdzon.newsfeedbackend.controller
 
 import com.vdzon.newsfeedbackend.model.NewsItem
 import com.vdzon.newsfeedbackend.service.NewsService
+import com.vdzon.newsfeedbackend.service.RequestService
 import org.springframework.security.core.Authentication
 import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.DeleteMapping
@@ -17,20 +18,30 @@ import org.springframework.web.bind.annotation.RestController
 
 @RestController
 @RequestMapping("/api/news")
-class NewsController(private val newsService: NewsService) {
+class NewsController(
+    private val newsService: NewsService,
+    private val requestService: RequestService
+) {
 
     @GetMapping
     fun getAll(auth: Authentication): List<NewsItem> = newsService.getAll(auth.name)
 
     @PostMapping("/refresh")
     fun refresh(auth: Authentication): Map<String, String> {
-        newsService.refresh(auth.name)
+        // Loopt via het verzoeken-systeem zodat de queue het PROCESSING-status toont
+        requestService.runDailyUpdate(auth.name)
         return mapOf("status" to "ok")
     }
 
     @PutMapping("/{id}/read")
     fun markRead(@PathVariable id: String, auth: Authentication): Map<String, String> {
         newsService.markRead(auth.name, id)
+        return mapOf("status" to "ok")
+    }
+
+    @PutMapping("/{id}/unread")
+    fun markUnread(@PathVariable id: String, auth: Authentication): Map<String, String> {
+        newsService.markUnread(auth.name, id)
         return mapOf("status" to "ok")
     }
 
@@ -45,9 +56,10 @@ class NewsController(private val newsService: NewsService) {
         @RequestParam olderThanDays: Int,
         @RequestParam(defaultValue = "true") keepStarred: Boolean,
         @RequestParam(defaultValue = "true") keepLiked: Boolean,
+        @RequestParam(defaultValue = "true") keepUnread: Boolean,
         auth: Authentication
     ): Map<String, Int> {
-        val removed = newsService.cleanup(auth.name, olderThanDays, keepStarred, keepLiked)
+        val removed = newsService.cleanup(auth.name, olderThanDays, keepStarred, keepLiked, keepUnread)
         return mapOf("removed" to removed)
     }
 

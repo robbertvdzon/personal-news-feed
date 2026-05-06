@@ -8,6 +8,8 @@ import org.slf4j.LoggerFactory
 import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Service
 import java.time.Instant
+import java.util.Collections
+import java.util.concurrent.ConcurrentHashMap
 
 @Service
 class RequestProcessor(
@@ -17,6 +19,15 @@ class RequestProcessor(
     private val newsService: NewsService,
     private val webSocketHandler: RequestWebSocketHandler
 ) {
+    // Set met request-IDs die gecanceld zijn; wordt gecheckt in de processing loops
+    private val cancelledIds: MutableSet<String> = Collections.newSetFromMap(ConcurrentHashMap())
+
+    fun markCancelled(id: String) {
+        cancelledIds.add(id)
+    }
+
+    private fun isCancelled(id: String) = cancelledIds.contains(id)
+
     private fun loadFeedback(username: String): FeedbackContext {
         val liked = newsService.getLikedItems(username).map { it.title }
         val disliked = newsService.getDislikedItems(username).map { it.title }
@@ -29,6 +40,7 @@ class RequestProcessor(
 
     @Async
     fun processRequest(username: String, request: NewsRequest) {
+        if (isCancelled(request.id)) return
         updateStatus(username, request.id, RequestStatus.PROCESSING)
         try {
             val categories = settingsService.getSettings(username)
@@ -43,10 +55,17 @@ class RequestProcessor(
                 rssUrls = rssUrls,
                 feedback = feedback,
                 onArticle = { item ->
-                    newsService.addItems(username, listOf(item))
-                    log.info("Artikel direct toegevoegd: '{}'", item.title.take(50))
+                    if (!isCancelled(request.id)) {
+                        newsService.addItems(username, listOf(item))
+                        log.info("Artikel direct toegevoegd: '{}'", item.title.take(50))
+                    }
                 }
             )
+            if (isCancelled(request.id)) {
+                log.info("Verzoek '{}' geannuleerd voor {}", request.subject, username)
+                cancelledIds.remove(request.id)
+                return
+            }
             if (articles.isNotEmpty()) {
                 log.info("Verzoek '{}' afgerond voor {}: {} artikelen", request.subject, username, articles.size)
             } else {
@@ -54,13 +73,19 @@ class RequestProcessor(
             }
             updateStatus(username, request.id, RequestStatus.DONE, articles.size, costUsd)
         } catch (e: Exception) {
-            log.error("Request verwerking mislukt voor {}: {}", username, e.message)
-            updateStatus(username, request.id, RequestStatus.FAILED)
+            if (isCancelled(request.id)) {
+                log.info("Verzoek '{}' geannuleerd voor {}", request.subject, username)
+                cancelledIds.remove(request.id)
+            } else {
+                log.error("Request verwerking mislukt voor {}: {}", username, e.message)
+                updateStatus(username, request.id, RequestStatus.FAILED)
+            }
         }
     }
 
     @Async
     fun processDailyUpdate(username: String, requestId: String) {
+        if (isCancelled(requestId)) return
         updateStatus(username, requestId, RequestStatus.PROCESSING)
         try {
             val categories = settingsService.getSettings(username)
@@ -71,10 +96,17 @@ class RequestProcessor(
                 rssUrls = rssUrls,
                 feedback = feedback,
                 onArticle = { item ->
-                    newsService.addItems(username, listOf(item))
-                    log.info("Dagelijks artikel direct toegevoegd: '{}'", item.title.take(50))
+                    if (!isCancelled(requestId)) {
+                        newsService.addItems(username, listOf(item))
+                        log.info("Dagelijks artikel direct toegevoegd: '{}'", item.title.take(50))
+                    }
                 }
             )
+            if (isCancelled(requestId)) {
+                log.info("Daily Update geannuleerd voor {}", username)
+                cancelledIds.remove(requestId)
+                return
+            }
             if (fetchResult.items.isNotEmpty()) {
                 log.info("Daily Update afgerond voor {}: {} artikelen, kosten \${}", username, fetchResult.items.size, "%.4f".format(fetchResult.totalCostUsd))
             } else {
@@ -82,8 +114,13 @@ class RequestProcessor(
             }
             updateStatusDailyUpdate(username, requestId, RequestStatus.DONE, fetchResult.items.size, fetchResult.totalCostUsd, fetchResult.categoryResults)
         } catch (e: Exception) {
-            log.error("Daily Update verwerking mislukt voor {}: {}", username, e.message)
-            updateStatus(username, requestId, RequestStatus.FAILED)
+            if (isCancelled(requestId)) {
+                log.info("Daily Update geannuleerd voor {}", username)
+                cancelledIds.remove(requestId)
+            } else {
+                log.error("Daily Update verwerking mislukt voor {}: {}", username, e.message)
+                updateStatus(username, requestId, RequestStatus.FAILED)
+            }
         }
     }
 
@@ -96,6 +133,7 @@ class RequestProcessor(
         val index = requests.indexOfFirst { it.id == id }
         if (index == -1) return
         val current = requests[index]
+        if (current.status == RequestStatus.CANCELLED) return  // nooit overschrijven
         val isDone = status == RequestStatus.DONE || status == RequestStatus.FAILED
         val duration = if (isDone && current.processingStartedAt != null)
             (now.toEpochMilli() - Instant.parse(current.processingStartedAt).toEpochMilli()) / 1000
@@ -122,6 +160,7 @@ class RequestProcessor(
         val index = requests.indexOfFirst { it.id == id }
         if (index == -1) return
         val current = requests[index]
+        if (current.status == RequestStatus.CANCELLED) return  // nooit overschrijven
         val isDone = status == RequestStatus.DONE || status == RequestStatus.FAILED
         val duration = if (isDone && current.processingStartedAt != null)
             (now.toEpochMilli() - Instant.parse(current.processingStartedAt).toEpochMilli()) / 1000

@@ -101,12 +101,14 @@ class ApiService {
     required int olderThanDays,
     required bool keepStarred,
     required bool keepLiked,
+    required bool keepUnread,
   }) async {
     final uri = Uri.parse('${AppConfig.apiBaseUrl}/api/news/cleanup').replace(
       queryParameters: {
         'olderThanDays': '$olderThanDays',
         'keepStarred': '$keepStarred',
         'keepLiked': '$keepLiked',
+        'keepUnread': '$keepUnread',
       },
     );
     final response = await _client.delete(uri, headers: _headers);
@@ -118,6 +120,13 @@ class ApiService {
   static Future<void> deleteRequest(String id) async {
     await _client.delete(
       Uri.parse('${AppConfig.apiBaseUrl}/api/requests/$id'),
+      headers: _headers,
+    );
+  }
+
+  static Future<void> cancelRequest(String id) async {
+    await _client.post(
+      Uri.parse('${AppConfig.apiBaseUrl}/api/requests/$id/cancel'),
       headers: _headers,
     );
   }
@@ -136,6 +145,13 @@ class ApiService {
   static Future<void> markRead(String id) async {
     await _client.put(
       Uri.parse('${AppConfig.apiBaseUrl}/api/news/$id/read'),
+      headers: _headers,
+    );
+  }
+
+  static Future<void> markUnread(String id) async {
+    await _client.put(
+      Uri.parse('${AppConfig.apiBaseUrl}/api/news/$id/unread'),
       headers: _headers,
     );
   }

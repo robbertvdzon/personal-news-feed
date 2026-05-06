@@ -599,6 +599,7 @@ class _CleanupDialogState extends ConsumerState<_CleanupDialog> {
   int _days = 14;
   bool _keepStarred = true;
   bool _keepLiked = true;
+  bool _keepUnread = true;
   bool _running = false;
 
   final _daysController = TextEditingController(text: '14');
@@ -618,6 +619,7 @@ class _CleanupDialogState extends ConsumerState<_CleanupDialog> {
             olderThanDays: days,
             keepStarred: _keepStarred,
             keepLiked: _keepLiked,
+            keepUnread: _keepUnread,
           );
       if (!mounted) return;
       Navigator.of(context).pop();
@@ -693,6 +695,14 @@ class _CleanupDialogState extends ConsumerState<_CleanupDialog> {
             value: _keepLiked,
             onChanged: (v) => setState(() => _keepLiked = v ?? true),
             title: const Text('Gelikte artikelen 👍'),
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            dense: true,
+          ),
+          CheckboxListTile(
+            value: _keepUnread,
+            onChanged: (v) => setState(() => _keepUnread = v ?? true),
+            title: const Text('Ongelezen artikelen 📖'),
             contentPadding: EdgeInsets.zero,
             controlAffinity: ListTileControlAffinity.leading,
             dense: true,

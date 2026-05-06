@@ -7,6 +7,7 @@ import org.springframework.web.client.RestClient
 import org.w3c.dom.Element
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
+import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.stream.Stream
@@ -53,16 +54,16 @@ class RssFetchService {
         doc.documentElement.normalize()
 
         return when (val rootTag = doc.documentElement.localName ?: doc.documentElement.tagName) {
-            "rss"  -> parseRss(doc, source)
-            "feed" -> parseAtom(doc, source)
-            "RDF"  -> parseRss(doc, source)  // RSS 1.0
+            "rss"  -> parseRss(doc, source, url)
+            "feed" -> parseAtom(doc, source, url)
+            "RDF"  -> parseRss(doc, source, url)  // RSS 1.0
             else   -> { log.warn("Onbekend feed formaat '{}' voor '{}'", rootTag, url); emptyList() }
         }
     }
 
     // ── RSS 2.0 ───────────────────────────────────────────────────────────────
 
-    private fun parseRss(doc: org.w3c.dom.Document, source: String): List<TavilySearchResult> {
+    private fun parseRss(doc: org.w3c.dom.Document, source: String, feedUrl: String): List<TavilySearchResult> {
         val items = doc.getElementsByTagName("item")
         return (0 until items.length).mapNotNull { i ->
             val item = items.item(i) as? Element ?: return@mapNotNull null
@@ -70,20 +71,22 @@ class RssFetchService {
             val link  = item.childText("link")  ?: return@mapNotNull null
             if (!link.startsWith("http")) return@mapNotNull null
             val pubDate = item.childText("pubDate")?.let { parseRssDate(it) }
+                ?: item.dcDate()?.let { parseAtomDate(it) }
             val content = item.contentEncoded() ?: item.childText("description") ?: ""
             TavilySearchResult(
                 title = title.trim(),
                 url   = link.trim(),
                 source = source,
                 snippet = content.stripHtml().take(1000),
-                publishedDate = pubDate
+                publishedDate = pubDate,
+                feedUrl = feedUrl
             )
         }
     }
 
     // ── Atom ──────────────────────────────────────────────────────────────────
 
-    private fun parseAtom(doc: org.w3c.dom.Document, source: String): List<TavilySearchResult> {
+    private fun parseAtom(doc: org.w3c.dom.Document, source: String, feedUrl: String): List<TavilySearchResult> {
         val entries = doc.getElementsByTagName("entry")
         return (0 until entries.length).mapNotNull { i ->
             val entry = entries.item(i) as? Element ?: return@mapNotNull null
@@ -98,7 +101,8 @@ class RssFetchService {
                 url   = link.trim(),
                 source = source,
                 snippet = content.stripHtml().take(1000),
-                publishedDate = pubDate
+                publishedDate = pubDate,
+                feedUrl = feedUrl
             )
         }
     }
@@ -114,6 +118,12 @@ class RssFetchService {
     private fun Element.contentEncoded(): String? {
         var nodes = getElementsByTagNameNS("http://purl.org/rss/1.0/modules/content/", "encoded")
         if (nodes.length == 0) nodes = getElementsByTagName("content:encoded")
+        return nodes.item(0)?.textContent?.trim()?.takeIf { it.isNotEmpty() }
+    }
+
+    private fun Element.dcDate(): String? {
+        var nodes = getElementsByTagNameNS("http://purl.org/dc/elements/1.1/", "date")
+        if (nodes.length == 0) nodes = getElementsByTagName("dc:date")
         return nodes.item(0)?.textContent?.trim()?.takeIf { it.isNotEmpty() }
     }
 
@@ -157,8 +167,9 @@ class RssFetchService {
         val clean = date.trim()
         for (fmt in rssDateFormats) {
             try {
-                return OffsetDateTime.parse(clean, fmt)
-                    .withOffsetSameInstant(ZoneOffset.UTC).toLocalDate().toString()
+                // ZonedDateTime i.p.v. OffsetDateTime: pakt ook zone-namen zoals "GMT", "EST" etc.
+                return ZonedDateTime.parse(clean, fmt)
+                    .withZoneSameInstant(ZoneOffset.UTC).toLocalDate().toString()
             } catch (_: Exception) {}
         }
         // Fallback: zoek YYYY-MM-DD patroon in de string
