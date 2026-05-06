@@ -49,8 +49,14 @@ class RealNewsSourceService(
         var totalCost = 0.0
 
         val enabledCategories = categories.filter { it.enabled && !it.isSystem && it.id !in SYSTEM_CATEGORY_IDS }
+        val skipped = enabledCategories.filter { it.websites.isEmpty() }
+        if (skipped.isNotEmpty()) {
+            log.info("Categorieën overgeslagen (geen bronnen geconfigureerd): {}",
+                skipped.joinToString { it.name })
+        }
+        val categoriesWithSources = enabledCategories.filter { it.websites.isNotEmpty() }
 
-        enabledCategories.forEach { cat ->
+        categoriesWithSources.forEach { cat ->
             val result = fetchAndSummarize(
                 subject = cat.name,
                 extraInstructions = cat.extraInstructions,
@@ -78,7 +84,7 @@ class RealNewsSourceService(
 
         // Dagelijks overzicht: redactionele briefing van alle gevonden artikelen
         if (allItems.isNotEmpty()) {
-            val categoryNames = enabledCategories.map { it.name }
+            val categoryNames = categoriesWithSources.map { it.name }
             try {
                 log.info("Dagelijks overzicht genereren op basis van {} artikelen", allItems.size)
                 val (summaryItem, summaryCost) = anthropicService.generateDailySummary(allItems, categoryNames)
@@ -145,15 +151,33 @@ class RealNewsSourceService(
             dislikedTitles = feedback.dislikedTitles
         )
 
-        // Stap 2: Tavily zoekt in gecureerde websites (met fallback naar breed zoeken)
-        var searchResults = if (websites.isNotEmpty()) {
-            val results = tavilyService.search(query = query, maxResults = SEARCH_POOL_SIZE, days = searchDays, includeDomains = websites)
-            if (results.isEmpty()) {
-                log.warn("Geen resultaten binnen gecureerde websites voor '{}', terugvallen op breed zoeken", subject)
-                tavilyService.search(query = query, maxResults = SEARCH_POOL_SIZE, days = searchDays)
-            } else results
+        // Stap 2: Per bron een aparte Tavily-call — meer resultaten, betere recency per site
+        var searchResults: List<TavilySearchResult>
+        if (websites.isNotEmpty()) {
+            val seenUrls = mutableSetOf<String>()
+            val merged = mutableListOf<TavilySearchResult>()
+            websites.forEach { site ->
+                val siteResults = tavilyService.search(
+                    query = query,
+                    maxResults = SEARCH_POOL_SIZE,
+                    days = searchDays,
+                    includeDomains = listOf(site)
+                )
+                var added = 0
+                siteResults.forEach { r ->
+                    if (seenUrls.add(r.url)) {
+                        merged.add(r)
+                        added++
+                    }
+                }
+                log.info("  Bron '{}': {} resultaten", site, added)
+            }
+            searchResults = merged
+            log.info("Tavily totaal voor '{}': {} unieke resultaten van {} bronnen",
+                subject, searchResults.size, websites.size)
         } else {
-            tavilyService.search(query = query, maxResults = SEARCH_POOL_SIZE, days = searchDays)
+            // Geen bronnen geconfigureerd — breed zoeken als fallback (bijv. handmatige verzoeken)
+            searchResults = tavilyService.search(query = query, maxResults = SEARCH_POOL_SIZE, days = searchDays)
         }
 
         if (searchResults.isEmpty()) {
