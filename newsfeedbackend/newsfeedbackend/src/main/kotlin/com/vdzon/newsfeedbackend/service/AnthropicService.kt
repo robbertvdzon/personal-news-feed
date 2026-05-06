@@ -269,8 +269,23 @@ class AnthropicService(
 
         val historyPart = if (topicHistoryContext.isNotBlank()) "\n\n$topicHistoryContext" else ""
 
+        // Schaal het aantal onderwerpen op basis van de podcastduur
+        val mainTopics = when {
+            durationMinutes <= 5  -> "1-2"
+            durationMinutes <= 10 -> "2-3"
+            durationMinutes <= 20 -> "3-4"
+            durationMinutes <= 40 -> "4-5"
+            else                  -> "5-6"
+        }
+        val newsItems = when {
+            durationMinutes <= 5  -> "2-3"
+            durationMinutes <= 10 -> "3-4"
+            durationMinutes <= 20 -> "4-6"
+            else                  -> "5-8"
+        }
+
         val prompt = """
-            Analyseer de volgende ${rssArticles.size} RSS-artikelen van de afgelopen $periodDays dag(en) en bepaal de beste onderwerpen voor een Nederlandstalige tech-podcast.
+            Analyseer de volgende ${rssArticles.size} RSS-artikelen van de afgelopen $periodDays dag(en) en bepaal de beste onderwerpen voor een Nederlandstalige tech-podcast van $durationMinutes minuten.
 
             ARTIKELEN (titel en bron):
             $articleList
@@ -280,10 +295,11 @@ class AnthropicService(
             - Onderwerpen die in MEERDERE feeds terugkomen zijn "hot" — geef die voorrang
             - Houd rekening met de interesses en feedback van de gebruiker
             - Vermijd onderwerpen die recent al uitgebreid in de podcast zijn behandeld (zie geschiedenis)
+            - Stem het aantal onderwerpen af op de duur: $durationMinutes minuten biedt ruimte voor $mainTopics hoofdonderwerpen
 
             Geef een gestructureerd redactioneel briefing-document met:
-            - 2-3 HOOFDONDERWERPEN: elk met een kernvraag, waarom het hot is, en interessante invalshoek
-            - 3-5 NIEUWSITEMS: kort te noemen nieuwtjes (1-2 zinnen per stuk)
+            - $mainTopics HOOFDONDERWERPEN: elk met een kernvraag, waarom het hot is, en interessante invalshoek
+            - $newsItems NIEUWSITEMS: kort te noemen nieuwtjes (1-2 zinnen per stuk)
 
             Schrijf in het Nederlands. Geen extra uitleg, alleen het briefing-document.
         """.trimIndent()

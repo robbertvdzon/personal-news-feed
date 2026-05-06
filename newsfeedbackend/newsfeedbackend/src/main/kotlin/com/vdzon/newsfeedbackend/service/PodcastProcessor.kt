@@ -90,7 +90,8 @@ class PodcastProcessor(
                     starredTitles       = starredTitles,
                     categoryInterests   = categoryInterests,
                     topicHistoryContext = topicHistoryContext,
-                    periodDays          = podcast.periodDays
+                    periodDays          = podcast.periodDays,
+                    durationMinutes     = podcast.durationMinutes
                 ).let { (plan, cost) ->
                     log.info("Podcast onderwerpen bepaald voor {}", username)
                     Pair(plan as String?, cost)
