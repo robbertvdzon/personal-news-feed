@@ -20,18 +20,6 @@ class ApiService {
         if (_token != null) 'Authorization': 'Bearer $_token',
       };
 
-  static Future<List<NewsItem>> fetchNews() async {
-    final response = await _client.get(
-      Uri.parse('${AppConfig.apiBaseUrl}/api/news'),
-      headers: _headers,
-    );
-    if (response.statusCode != 200) {
-      throw Exception('Fout bij ophalen nieuws: ${response.statusCode}');
-    }
-    final list = jsonDecode(response.body) as List<dynamic>;
-    return list.map((e) => NewsItem.fromJson(e as Map<String, dynamic>)).toList();
-  }
-
   static Future<List<FeedItem>> fetchFeedItems() async {
     final response = await _client.get(
       Uri.parse('${AppConfig.apiBaseUrl}/api/feed'),
@@ -102,7 +90,7 @@ class ApiService {
 
   static Future<List<NewsItem>> fetchRssItems() async {
     final response = await _client.get(
-      Uri.parse('${AppConfig.apiBaseUrl}/api/rss-items'),
+      Uri.parse('${AppConfig.apiBaseUrl}/api/rss'),
       headers: _headers,
     );
     if (response.statusCode != 200) {
@@ -163,7 +151,7 @@ class ApiService {
 
   static Future<void> refreshNews() async {
     final response = await _client.post(
-      Uri.parse('${AppConfig.apiBaseUrl}/api/news/refresh'),
+      Uri.parse('${AppConfig.apiBaseUrl}/api/rss/refresh'),
       headers: _headers,
     );
     if (response.statusCode != 200) {
@@ -173,7 +161,7 @@ class ApiService {
 
   static Future<void> deleteNewsItem(String id) async {
     await _client.delete(
-      Uri.parse('${AppConfig.apiBaseUrl}/api/news/$id'),
+      Uri.parse('${AppConfig.apiBaseUrl}/api/rss/$id'),
       headers: _headers,
     );
   }
@@ -184,7 +172,7 @@ class ApiService {
     required bool keepLiked,
     required bool keepUnread,
   }) async {
-    final uri = Uri.parse('${AppConfig.apiBaseUrl}/api/news/cleanup').replace(
+    final uri = Uri.parse('${AppConfig.apiBaseUrl}/api/rss/cleanup').replace(
       queryParameters: {
         'olderThanDays': '$olderThanDays',
         'keepStarred': '$keepStarred',
@@ -225,21 +213,21 @@ class ApiService {
 
   static Future<void> markRead(String id) async {
     await _client.put(
-      Uri.parse('${AppConfig.apiBaseUrl}/api/news/$id/read'),
+      Uri.parse('${AppConfig.apiBaseUrl}/api/rss/$id/read'),
       headers: _headers,
     );
   }
 
   static Future<void> markUnread(String id) async {
     await _client.put(
-      Uri.parse('${AppConfig.apiBaseUrl}/api/news/$id/unread'),
+      Uri.parse('${AppConfig.apiBaseUrl}/api/rss/$id/unread'),
       headers: _headers,
     );
   }
 
   static Future<void> toggleStar(String id) async {
     await _client.put(
-      Uri.parse('${AppConfig.apiBaseUrl}/api/news/$id/star'),
+      Uri.parse('${AppConfig.apiBaseUrl}/api/rss/$id/star'),
       headers: _headers,
     );
   }
@@ -316,7 +304,7 @@ class ApiService {
 
   static Future<void> setFeedback(String id, bool? liked) async {
     await _client.put(
-      Uri.parse('${AppConfig.apiBaseUrl}/api/news/$id/feedback'),
+      Uri.parse('${AppConfig.apiBaseUrl}/api/rss/$id/feedback'),
       headers: _headers,
       body: jsonEncode({'liked': liked}),
     );

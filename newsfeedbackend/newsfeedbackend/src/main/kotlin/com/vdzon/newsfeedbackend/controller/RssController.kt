@@ -1,8 +1,6 @@
 package com.vdzon.newsfeedbackend.controller
 
-import com.vdzon.newsfeedbackend.model.FeedItem
 import com.vdzon.newsfeedbackend.model.RssItem
-import com.vdzon.newsfeedbackend.service.FeedItemService
 import com.vdzon.newsfeedbackend.service.RssItemService
 import com.vdzon.newsfeedbackend.service.RequestService
 import org.springframework.security.core.Authentication
@@ -16,69 +14,64 @@ import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 
 @RestController
-class NewsController(
+class RssController(
     private val rssItemService: RssItemService,
-    private val feedItemService: FeedItemService,
     private val requestService: RequestService
 ) {
 
-    // ── /api/news — feed-items (FeedItems voor backward compatibility) ─────────
+    // ── GET /api/rss — alle RSS-items ─────────────────────────────────────────
 
-    @GetMapping("/api/news")
-    fun getFeedItems(auth: Authentication): List<FeedItem> =
-        feedItemService.getAll(auth.name).sortedByDescending { it.createdAt }
+    @GetMapping("/api/rss")
+    fun getAllRssItems(auth: Authentication): List<RssItem> =
+        rssItemService.getAll(auth.name)
+            .sortedByDescending { it.timestamp }
 
-    @PostMapping("/api/news/refresh")
+    // ── POST /api/rss/refresh — trigger dagelijkse update ─────────────────────
+
+    @PostMapping("/api/rss/refresh")
     fun refresh(auth: Authentication): Map<String, String> {
         requestService.runDailyUpdate(auth.name)
         return mapOf("status" to "ok")
     }
 
-    // ── /api/rss-items — alle RSS-items ───────────────────────────────────────
+    // ── CRUD op RssItems via /api/rss ─────────────────────────────────────────
 
-    @GetMapping("/api/rss-items")
-    fun getAllRssItems(auth: Authentication): List<RssItem> =
-        rssItemService.getAll(auth.name)
-            .sortedByDescending { it.timestamp }
-
-    // ── CRUD op FeedItems via /api/news ───────────────────────────────────────
-
-    @PutMapping("/api/news/{id}/read")
+    @PutMapping("/api/rss/{id}/read")
     fun markRead(@PathVariable id: String, auth: Authentication): Map<String, String> {
-        feedItemService.markRead(auth.name, id)
+        rssItemService.markRead(auth.name, id)
         return mapOf("status" to "ok")
     }
 
-    @PutMapping("/api/news/{id}/unread")
+    @PutMapping("/api/rss/{id}/unread")
     fun markUnread(@PathVariable id: String, auth: Authentication): Map<String, String> {
-        feedItemService.markUnread(auth.name, id)
+        rssItemService.markUnread(auth.name, id)
         return mapOf("status" to "ok")
     }
 
-    @PutMapping("/api/news/{id}/star")
+    @PutMapping("/api/rss/{id}/star")
     fun toggleStar(@PathVariable id: String, auth: Authentication): Map<String, String> {
-        feedItemService.toggleStar(auth.name, id)
+        rssItemService.toggleStar(auth.name, id)
         return mapOf("status" to "ok")
     }
 
-    @PutMapping("/api/news/{id}/feedback")
+    @PutMapping("/api/rss/{id}/feedback")
     fun setFeedback(
         @PathVariable id: String,
         @RequestBody body: Map<String, Any?>,
         auth: Authentication
     ): Map<String, String> {
         val liked = body["liked"] as? Boolean
-        feedItemService.setFeedback(auth.name, id, liked)
+        rssItemService.setFeedback(auth.name, id, liked)
         return mapOf("status" to "ok")
     }
 
-    @DeleteMapping("/api/news/{id}")
+    @DeleteMapping("/api/rss/{id}")
     fun deleteItem(@PathVariable id: String, auth: Authentication): Map<String, String> {
-        feedItemService.deleteItem(auth.name, id)
+        rssItemService.deleteItem(auth.name, id)
         return mapOf("status" to "ok")
     }
 
-    @DeleteMapping("/api/news/cleanup")
+    @DeleteMapping("/api/rss/cleanup")
     fun cleanup(
         @RequestParam(defaultValue = "30") olderThanDays: Int,
         @RequestParam(defaultValue = "true") keepStarred: Boolean,
@@ -86,7 +79,7 @@ class NewsController(
         @RequestParam(defaultValue = "false") keepUnread: Boolean,
         auth: Authentication
     ): Map<String, Int> {
-        val removed = feedItemService.cleanup(auth.name, olderThanDays, keepStarred, keepLiked, keepUnread)
+        val removed = rssItemService.cleanup(auth.name, olderThanDays, keepStarred, keepLiked, keepUnread)
         return mapOf("removed" to removed)
     }
 }

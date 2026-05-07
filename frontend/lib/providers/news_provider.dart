@@ -108,20 +108,20 @@ final showReadProvider = StateProvider<bool>((ref) => false);
 // Toon alleen bewaarde (gesterrde) items
 final showStarredProvider = StateProvider<bool>((ref) => false);
 
-// Nieuws van de backend (feed-items: inFeed=true)
+// Nieuws van de backend (RSS-items)
 class NewsNotifier extends AsyncNotifier<List<NewsItem>> {
   @override
   Future<List<NewsItem>> build() async {
     final auth = ref.watch(authProvider).valueOrNull;
     if (auth?.isLoggedIn != true) return [];
-    final items = await ApiService.fetchNews();
+    final items = await ApiService.fetchRssItems();
     _syncCachesFromItems(items);
     return items;
   }
 
   Future<void> refresh() async {
     state = const AsyncLoading();
-    final items = await AsyncValue.guard(ApiService.fetchNews);
+    final items = await AsyncValue.guard(ApiService.fetchRssItems);
     state = items;
     final loaded = items.valueOrNull;
     if (loaded != null) _syncCachesFromItems(loaded);
@@ -169,11 +169,10 @@ class NewsNotifier extends AsyncNotifier<List<NewsItem>> {
     // Poll elke 4 seconden zodat nieuwe artikelen direct zichtbaar zijn
     final pollTimer = Timer.periodic(const Duration(seconds: 4), (_) async {
       try {
-        final feedItems = await ApiService.fetchNews();
         final rssItems = await ApiService.fetchRssItems();
         if (state.valueOrNull != null) {
-          state = AsyncData(feedItems);
-          _syncCachesFromItems(feedItems);
+          state = AsyncData(rssItems);
+          _syncCachesFromItems(rssItems);
         }
         ref.read(rssItemsProvider.notifier).setItems(rssItems);
       } catch (_) {}
@@ -181,7 +180,6 @@ class NewsNotifier extends AsyncNotifier<List<NewsItem>> {
     try {
       await ApiService.refreshNews();
       await refresh();
-      // Ververs ook de RSS-items
       ref.read(rssItemsProvider.notifier).refresh();
     } finally {
       pollTimer.cancel();
