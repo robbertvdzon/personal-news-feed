@@ -121,8 +121,8 @@ class RssProcessingService(
         if (summarized.isNotEmpty()) {
             try {
                 val existingFeedItems = existing.filter { it.inFeed }.takeLast(50)
-                val likedTitles = rssItemService.getLikedItems(username).map { it.title }.take(10)
-                val dislikedTitles = rssItemService.getDislikedItems(username).map { it.title }.take(10)
+                val likedTitles = rssItemService.getLikedItems(username).map { it.title }.take(20)
+                val dislikedTitles = rssItemService.getDislikedItems(username).map { it.title }.take(20)
                 val topicHistoryContext = topicHistoryService.buildNewsContext(username)
 
                 val (selections, selCost) = anthropicService.selectFeedItems(
