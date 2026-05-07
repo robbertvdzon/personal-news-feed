@@ -98,11 +98,9 @@ class ReadItemsNotifier extends Notifier<Set<String>> {
 final readItemsProvider =
     NotifierProvider<ReadItemsNotifier, Set<String>>(ReadItemsNotifier.new);
 
-// Geselecteerde tab: 'feed' of 'rss'
-final selectedFeedTabProvider = StateProvider<String>((ref) => 'feed');
-
-// Geselecteerde categorie (null = alles)
-final selectedCategoryProvider = StateProvider<String?>((ref) => null);
+// Geselecteerde categorie voor RSS-scherm (null = alles, '__overig__' = overig)
+const kRssOverigCategory = '__overig__';
+final selectedRssCategoryProvider = StateProvider<String?>((ref) => null);
 
 // Toon ook al-gelezen items
 final showReadProvider = StateProvider<bool>((ref) => false);
@@ -222,80 +220,61 @@ class RssItemsNotifier extends AsyncNotifier<List<NewsItem>> {
 final rssItemsProvider =
     AsyncNotifierProvider<RssItemsNotifier, List<NewsItem>>(RssItemsNotifier.new);
 
-// Gefilterde nieuwslijst — feed-tab (inFeed=true items met categorie/gelezen filters)
-final filteredNewsProvider = Provider<List<NewsItem>>((ref) {
-  final feedTab = ref.watch(selectedFeedTabProvider);
-  final showStarred = ref.watch(showStarredProvider);
+// Gefilterde RSS-items — per categorie + gelezen filter
+// Items zonder bekende categorie vallen onder kRssOverigCategory
+final filteredRssItemsProvider = Provider<List<NewsItem>>((ref) {
+  final items = ref.watch(rssItemsProvider).valueOrNull ?? [];
   final readItems = ref.watch(readItemsProvider);
-  final starredItems = ref.watch(starredItemsProvider);
-
-  if (feedTab == 'rss') {
-    // RSS-tab: toon alle items chronologisch
-    final items = ref.watch(rssItemsProvider).valueOrNull ?? [];
-    final showRead = ref.watch(showReadProvider);
-    return items
-        .where((item) => showRead || !readItems.contains(item.id))
-        .toList()
-      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
-  }
-
-  final items = ref.watch(newsProvider).valueOrNull ?? [];
   final enabledIds = ref.watch(enabledCategoryIdsProvider);
-  final selectedCategory = ref.watch(selectedCategoryProvider);
+  final selectedCategory = ref.watch(selectedRssCategoryProvider);
   final showRead = ref.watch(showReadProvider);
 
-  if (showStarred) {
-    // Bewaard-tab: toon alle gesterrde items (ook gelezen), geen categorie-filter
-    return items
-        .where((item) => starredItems.contains(item.id))
-        .toList()
-      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+  bool matchesCategory(NewsItem item) {
+    if (selectedCategory == null) return true;
+    final isOverig = item.category.isEmpty || !enabledIds.contains(item.category);
+    if (selectedCategory == kRssOverigCategory) return isOverig;
+    return item.category == selectedCategory;
   }
 
   return items
-      .where((item) => enabledIds.contains(item.category))
-      .where((item) =>
-          selectedCategory == null ||
-          item.category == selectedCategory)
+      .where(matchesCategory)
       .where((item) => showRead || !readItems.contains(item.id))
       .toList()
     ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
 });
 
-// Of de nieuws-feed nog aan het laden is
-final newsLoadingProvider = Provider<bool>((ref) {
-  final feedTab = ref.watch(selectedFeedTabProvider);
-  if (feedTab == 'rss') return ref.watch(rssItemsProvider).isLoading;
-  return ref.watch(newsProvider).isLoading;
-});
+// Of de RSS-feed nog aan het laden is
+final rssLoadingProvider = Provider<bool>((ref) =>
+    ref.watch(rssItemsProvider).isLoading);
 
-// Aantal ongelezen items per categorie-ID (voor badges op de tabs)
-final unreadCountByCategoryProvider = Provider<Map<String, int>>((ref) {
-  final items = ref.watch(newsProvider).valueOrNull ?? [];
+// Ongelezen RSS-items per categorie-ID + '__overig__'
+final rssUnreadCountByCategoryProvider = Provider<Map<String, int>>((ref) {
+  final items = ref.watch(rssItemsProvider).valueOrNull ?? [];
   final readItems = ref.watch(readItemsProvider);
   final enabledIds = ref.watch(enabledCategoryIdsProvider);
   final counts = <String, int>{};
   for (final item in items) {
-    final isUnread = !readItems.contains(item.id) && !item.isRead;
-    if (!isUnread) continue;
-    if (enabledIds.contains(item.category)) {
-      counts[item.category] = (counts[item.category] ?? 0) + 1;
-    }
+    if (readItems.contains(item.id) || item.isRead) continue;
+    final isOverig = item.category.isEmpty || !enabledIds.contains(item.category);
+    final key = isOverig ? kRssOverigCategory : item.category;
+    counts[key] = (counts[key] ?? 0) + 1;
   }
   return counts;
 });
 
-// Aantal gelezen items in de huidige filtercombinatie
-final readCountProvider = Provider<int>((ref) {
-  final items = ref.watch(newsProvider).valueOrNull ?? [];
-  final enabledIds = ref.watch(enabledCategoryIdsProvider);
-  final selectedCategory = ref.watch(selectedCategoryProvider);
+// Aantal gelezen RSS-items in huidige filtercombinatie
+final rssReadCountProvider = Provider<int>((ref) {
+  final items = ref.watch(rssItemsProvider).valueOrNull ?? [];
   final readItems = ref.watch(readItemsProvider);
+  final enabledIds = ref.watch(enabledCategoryIdsProvider);
+  final selectedCategory = ref.watch(selectedRssCategoryProvider);
 
-  return items
-      .where((item) => enabledIds.contains(item.category))
-      .where((item) =>
-          selectedCategory == null || item.category == selectedCategory)
-      .where((item) => readItems.contains(item.id))
-      .length;
+  bool matchesCategory(NewsItem item) {
+    if (selectedCategory == null) return true;
+    final isOverig = item.category.isEmpty || !enabledIds.contains(item.category);
+    if (selectedCategory == kRssOverigCategory) return isOverig;
+    return item.category == selectedCategory;
+  }
+
+  return items.where(matchesCategory).where((i) => readItems.contains(i.id)).length;
 });

@@ -7,6 +7,7 @@ import 'screens/login_screen.dart';
 import 'screens/news_feed_screen.dart';
 import 'screens/podcast_screen.dart';
 import 'screens/queue_screen.dart';
+import 'screens/rss_screen.dart';
 import 'screens/settings_screen.dart';
 
 void main() {
@@ -73,6 +74,7 @@ class _MainShellState extends ConsumerState<_MainShell> {
 
   static const _screens = [
     NewsFeedScreen(),
+    RssScreen(),
     QueueScreen(),
     PodcastScreen(),
     SettingsScreen(),
@@ -96,6 +98,11 @@ class _MainShellState extends ConsumerState<_MainShell> {
             icon: Icon(Icons.newspaper_outlined),
             selectedIcon: Icon(Icons.newspaper),
             label: 'Feed',
+          ),
+          const NavigationDestination(
+            icon: Icon(Icons.rss_feed_outlined),
+            selectedIcon: Icon(Icons.rss_feed),
+            label: 'RSS',
           ),
           NavigationDestination(
             icon: Badge(

@@ -77,9 +77,9 @@ class RssProcessingService(
         val categories = settingsService.getSettings(username)
         val enabledCategories = categories.filter { it.enabled && !it.isSystem }
 
-        // Stap 1: Haal alle RSS-items op
-        val fetched = rssFetchService.fetchAll(rssUrls)
-        log.info("RSS: {} artikelen opgehaald voor {}", fetched.size, username)
+        // Stap 1: Haal alle RSS-items op (max 4 dagen oud)
+        val fetched = rssFetchService.fetchAll(rssUrls, maxAgeDays = 4)
+        log.info("RSS: {} artikelen opgehaald voor {} (max 4 dagen oud)", fetched.size, username)
 
         // Stap 2: Filter al bekende URLs
         val existing = storageService.loadRssItems(username)

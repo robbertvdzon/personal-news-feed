@@ -5,6 +5,7 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory
 import org.springframework.stereotype.Service
 import org.springframework.web.client.RestClient
 import org.w3c.dom.Element
+import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
@@ -25,9 +26,11 @@ class RssFetchService {
         RestClient.builder().requestFactory(factory).build()
     }
 
-    /** Haalt alle feeds parallel op en combineert de artikelen */
-    fun fetchAll(feedUrls: List<String>): List<TavilySearchResult> {
+    /** Haalt alle feeds parallel op en combineert de artikelen.
+     *  Items ouder dan [maxAgeDays] dagen worden weggegooid. */
+    fun fetchAll(feedUrls: List<String>, maxAgeDays: Long = 4): List<TavilySearchResult> {
         if (feedUrls.isEmpty()) return emptyList()
+        val cutoff = LocalDate.now().minusDays(maxAgeDays).toString()  // "YYYY-MM-DD"
         return feedUrls.parallelStream()
             .flatMap { url ->
                 try {
@@ -38,6 +41,10 @@ class RssFetchService {
                     log.warn("RSS ophalen mislukt voor '{}': {}", url, e.message)
                     Stream.empty()
                 }
+            }
+            .filter { item ->
+                val pub = item.publishedDate
+                pub == null || pub >= cutoff  // geen datum = altijd meenemen, anders leeftijdscheck
             }
             .toList()
     }

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/feed_item.dart';
 import '../models/news_item.dart';
+import '../providers/appearance_provider.dart';
 import '../providers/feed_provider.dart';
 import '../providers/news_provider.dart';
 import '../providers/request_provider.dart';
@@ -70,8 +71,13 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
     final isRead = readItems.contains(currentItem.id);
     final feedback = ref.watch(feedbackProvider);
     final liked = feedback[currentItem.id];
+    final appearance = ref.watch(appearanceProvider);
 
-    return Scaffold(
+    return MediaQuery(
+      data: MediaQuery.of(context).copyWith(
+        textScaler: TextScaler.linear(appearance.textScale),
+      ),
+      child: Scaffold(
       appBar: AppBar(
         title: Text('${_currentIndex + 1} / $total'),
         centerTitle: true,
@@ -146,6 +152,7 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
         onNext:
             _currentIndex < total - 1 ? () => _goTo(_currentIndex + 1) : null,
       ),
+      ),   // MediaQuery
     );
   }
 }

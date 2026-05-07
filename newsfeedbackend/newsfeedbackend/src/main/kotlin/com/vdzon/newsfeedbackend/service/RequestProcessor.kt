@@ -146,7 +146,7 @@ class RequestProcessor(
             val cutoff24h = java.time.Instant.now().minusSeconds(24 * 3600).toString()
             val cutoff7d = java.time.Instant.now().minusSeconds(7 * 24 * 3600).toString()
             val feedItems = feedItemService.getAll(username)
-                .filter { it.createdAt >= cutoff24h }
+                .filter { !it.isSummary && it.createdAt >= cutoff24h }
                 .sortedByDescending { it.createdAt }
             val allRssItems = rssItemService.getAll(username)
                 .filter { it.timestamp >= cutoff7d }
@@ -165,7 +165,27 @@ class RequestProcessor(
             log.info("Dagelijkse samenvatting gegenereerd voor {}: {} tekens, \${}",
                 username, summaryText.length, "%.4f".format(cost))
 
-            updateStatusDailySummary(username, requestId, RequestStatus.DONE, summaryText, cost)
+            // Sla de samenvatting op als FeedItem (isSummary=true) zodat hij in de Feed verschijnt
+            val today = java.time.LocalDate.now().toString()  // "YYYY-MM-DD"
+            val summaryFeedItemId = "daily-summary-feed-$today"
+            // Verwijder bestaande samenvatting van vandaag (bij herstart)
+            val existing = feedItemService.getAll(username).firstOrNull { it.id == summaryFeedItemId }
+            if (existing != null) feedItemService.deleteItem(username, summaryFeedItemId)
+
+            val summaryFeedItem = FeedItem(
+                id = summaryFeedItemId,
+                title = "Dagelijkse Samenvatting — $today",
+                summary = summaryText,
+                url = "",
+                category = "",
+                source = "AI Samenvatting",
+                isSummary = true,
+                createdAt = java.time.Instant.now().toString()
+            )
+            feedItemService.addItem(username, summaryFeedItem)
+            log.info("Dagelijkse samenvatting opgeslagen als FeedItem voor {}", username)
+
+            updateStatus(username, requestId, RequestStatus.DONE, 0, cost)
         } catch (e: Exception) {
             if (isCancelled(requestId)) {
                 log.info("Dagelijkse samenvatting geannuleerd voor {}", username)
@@ -175,33 +195,6 @@ class RequestProcessor(
                 updateStatus(username, requestId, RequestStatus.FAILED)
             }
         }
-    }
-
-    private fun updateStatusDailySummary(
-        username: String, id: String, status: RequestStatus,
-        summaryText: String, costUsd: Double
-    ) {
-        val now = Instant.now()
-        val requests = storageService.loadRequests(username).toMutableList()
-        val index = requests.indexOfFirst { it.id == id }
-        if (index == -1) return
-        val current = requests[index]
-        if (current.status == RequestStatus.CANCELLED) return
-        val isDone = status == RequestStatus.DONE || status == RequestStatus.FAILED
-        val duration = if (isDone && current.processingStartedAt != null)
-            (now.toEpochMilli() - Instant.parse(current.processingStartedAt).toEpochMilli()) / 1000
-        else current.durationSeconds.toLong()
-        val updated = current.copy(
-            status = status,
-            processingStartedAt = if (status == RequestStatus.PROCESSING) now.toString() else current.processingStartedAt,
-            completedAt = if (isDone) now.toString() else null,
-            summaryText = summaryText,
-            costUsd = costUsd,
-            durationSeconds = if (isDone) duration.toInt() else current.durationSeconds
-        )
-        requests[index] = updated
-        storageService.saveRequests(username, requests)
-        webSocketHandler.broadcast(updated)
     }
 
     private fun updateStatus(

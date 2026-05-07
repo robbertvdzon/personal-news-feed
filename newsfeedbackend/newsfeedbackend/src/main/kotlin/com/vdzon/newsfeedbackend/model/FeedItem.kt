@@ -15,5 +15,6 @@ data class FeedItem(
     val starred: Boolean = false,
     val liked: Boolean? = null,
     val createdAt: String,
-    val publishedDate: String? = null
+    val publishedDate: String? = null,
+    val isSummary: Boolean = false  // dagelijkse AI-samenvatting
 )

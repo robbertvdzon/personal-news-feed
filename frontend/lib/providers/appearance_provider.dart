@@ -9,7 +9,7 @@ class AppearanceState {
   final bool fontSizeLarge;
   const AppearanceState({this.fontSizeLarge = false});
 
-  double get textScale => fontSizeLarge ? 1.2 : 1.0;
+  double get textScale => fontSizeLarge ? 1.38 : 1.0;
 
   AppearanceState copyWith({bool? fontSizeLarge}) =>
       AppearanceState(fontSizeLarge: fontSizeLarge ?? this.fontSizeLarge);
