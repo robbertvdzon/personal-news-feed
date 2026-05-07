@@ -592,7 +592,7 @@ Wordt elk uur automatisch uitgevoerd voor elke gebruiker. Handmatig te triggeren
 2. Filter artikelen waarvan de URL al bekend is in de opgeslagen RssItems.
 3. Voor elk nieuw artikel: vraag Claude om een Nederlandse samenvatting (150-250 woorden), categorie-toewijzing en 2-3 canonieke onderwerpen.
 4. Sla alle nieuwe RssItems op (`inFeed: false`).
-5. Vraag Claude in één batch-aanroep om 20-40% van de nieuwe items te selecteren voor de persoonlijke feed. Context meegegeven: eerder gelikete/gedislikete items, onderwerp-geschiedenis, bestaande feed-items (exclusief dagelijkse samenvattingen).
+5. Vraag Claude in één batch-aanroep om per artikel te bepalen of het in de feed hoort. Er is geen minimum of maximum percentage — als niets interessant genoeg is selecteert Claude niets, als alles interessant is selecteert Claude alles. Context meegegeven: eerder gelikete/gedislikete items, onderwerp-geschiedenis, bestaande feed-items (exclusief dagelijkse samenvattingen).
 6. Update `inFeed` en `feedReason` op de geselecteerde RssItems.
 7. Voor elk geselecteerd item: vraag Claude om een uitgebreide Nederlandse FeedItem-samenvatting (400-600 woorden).
 8. Sla FeedItems op en koppel `feedItemId` terug op de RssItems.
@@ -694,7 +694,7 @@ Deze geschiedenis wordt als context meegegeven aan Claude bij:
 | Aanroep | Doel | Input | Output |
 |---|---|---|---|
 | `summarizeRssItem` | Samenvatting + categorie + topics van één RSS-artikel | Titel, snippet, beschikbare categorieën | Samenvatting (150-250 w), categorie-ID, 2-3 topics |
-| `selectFeedItems` | Batch-selectie van artikelen voor feed | Lijst van nieuwe artikelen, liked/disliked context, bestaande feed, topic-geschiedenis | Indices van geselecteerde artikelen (20-40%) |
+| `selectFeedItems` | Batch-selectie van artikelen voor feed | Lijst van nieuwe artikelen, liked/disliked context, bestaande feed, topic-geschiedenis | Per artikel: wel/niet in feed + reden (geen minimum of maximum) |
 | `generateFeedItemSummary` | Uitgebreide samenvatting voor feed | Artikel-URL, titel, ruwe tekst | Samenvatting (400-600 woorden, Nederlands) |
 | `generateDailySummaryFromRss` | Dagelijks nieuwsoverzicht | Alle FeedItems (24h) + RssItems (7d) | Markdown-briefing (600-1000 woorden) |
 | `selectArticles` | Selecteer beste artikelen voor ad-hoc verzoek | Onderwerp, kandidaatartikelen (titel+snippet) | 0-gebaseerde indices van beste keuzes |

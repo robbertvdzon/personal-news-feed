@@ -737,7 +737,8 @@ class AnthropicService(
             $newItemsList
 
             Selectieregels:
-            - Selecteer 20-40% van de artikelen voor de feed (kwaliteit boven kwantiteit)
+            - Selecteer alleen artikelen die echt relevant, actueel en inhoudelijk interessant zijn — er is geen minimum of maximum percentage
+            - Als geen enkel artikel interessant genoeg is, selecteer dan niets; als alles interessant is, selecteer dan alles
             - Voeg artikelen toe die relevant, actueel en inhoudelijk interessant zijn
             - Vermijd artikelen die al vertegenwoordigd zijn door bestaande feed-items
             - Pas de gebruikers interesses en feedback toe
