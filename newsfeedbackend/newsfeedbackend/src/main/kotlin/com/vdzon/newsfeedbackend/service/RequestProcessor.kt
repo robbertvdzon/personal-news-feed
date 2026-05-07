@@ -1,6 +1,7 @@
 package com.vdzon.newsfeedbackend.service
 
 import com.vdzon.newsfeedbackend.model.CategoryResult
+import com.vdzon.newsfeedbackend.model.FeedItem
 import com.vdzon.newsfeedbackend.model.NewsRequest
 import com.vdzon.newsfeedbackend.model.RequestStatus
 import com.vdzon.newsfeedbackend.model.RssItem
@@ -19,7 +20,10 @@ class RequestProcessor(
     private val realNewsSourceService: RealNewsSourceService,
     private val settingsService: SettingsService,
     private val rssItemService: RssItemService,
+    private val feedItemService: FeedItemService,
     private val rssProcessingService: RssProcessingService,
+    private val anthropicService: AnthropicService,
+    private val topicHistoryService: TopicHistoryService,
     private val webSocketHandler: RequestWebSocketHandler
 ) {
     // Set met request-IDs die gecanceld zijn; wordt gecheckt in de processing loops
@@ -63,26 +67,23 @@ class RequestProcessor(
                 existingUrls = existingUrls,
                 onArticle = { item ->
                     if (!isCancelled(request.id)) {
-                        // Converteer NewsItem → RssItem en sla op met inFeed=true (expliciet gevraagd)
-                        val rssItem = RssItem(
+                        val feedItem = FeedItem(
                             id = item.id,
                             title = item.title,
                             summary = item.summary,
                             url = item.url,
                             category = item.category,
-                            feedUrl = item.feedUrl ?: "",
                             source = item.source,
-                            snippet = "",
-                            publishedDate = item.publishedDate,
-                            timestamp = nowStr,
-                            processedAt = nowStr,
-                            inFeed = true,
+                            sourceUrls = listOf(item.url),
+                            sourceRssIds = emptyList(),
+                            topics = item.topics,
                             feedReason = "Gevraagd via verzoek: ${request.subject}",
-                            topics = item.topics
+                            createdAt = nowStr,
+                            publishedDate = item.publishedDate
                         )
-                        rssItemService.addItems(username, listOf(rssItem))
+                        feedItemService.addItem(username, feedItem)
                         addedCount++
-                        log.info("Verzoek-artikel direct toegevoegd: '{}'", item.title.take(50))
+                        log.info("Verzoek-artikel direct toegevoegd als FeedItem: '{}'", item.title.take(50))
                     }
                 }
             )
@@ -134,6 +135,73 @@ class RequestProcessor(
                 updateStatus(username, requestId, RequestStatus.FAILED)
             }
         }
+    }
+
+    @Async
+    fun processDailySummary(username: String, requestId: String) {
+        if (isCancelled(requestId)) return
+        updateStatus(username, requestId, RequestStatus.PROCESSING)
+        try {
+            val categories = settingsService.getSettings(username)
+            val cutoff24h = java.time.Instant.now().minusSeconds(24 * 3600).toString()
+            val cutoff7d = java.time.Instant.now().minusSeconds(7 * 24 * 3600).toString()
+            val feedItems = feedItemService.getAll(username)
+                .filter { it.createdAt >= cutoff24h }
+                .sortedByDescending { it.createdAt }
+            val allRssItems = rssItemService.getAll(username)
+                .filter { it.timestamp >= cutoff7d }
+                .sortedByDescending { it.timestamp }
+            val likedTitles = rssItemService.getLikedItems(username).map { it.title }.take(20)
+            val topicHistoryContext = topicHistoryService.buildNewsContext(username)
+
+            val (summaryText, cost) = anthropicService.generateDailySummaryFromRss(
+                feedItems = feedItems,
+                allRssItems = allRssItems,
+                categories = categories,
+                likedTitles = likedTitles,
+                topicHistoryContext = topicHistoryContext
+            )
+
+            log.info("Dagelijkse samenvatting gegenereerd voor {}: {} tekens, \${}",
+                username, summaryText.length, "%.4f".format(cost))
+
+            updateStatusDailySummary(username, requestId, RequestStatus.DONE, summaryText, cost)
+        } catch (e: Exception) {
+            if (isCancelled(requestId)) {
+                log.info("Dagelijkse samenvatting geannuleerd voor {}", username)
+                cancelledIds.remove(requestId)
+            } else {
+                log.error("Dagelijkse samenvatting mislukt voor {}: {}", username, e.message)
+                updateStatus(username, requestId, RequestStatus.FAILED)
+            }
+        }
+    }
+
+    private fun updateStatusDailySummary(
+        username: String, id: String, status: RequestStatus,
+        summaryText: String, costUsd: Double
+    ) {
+        val now = Instant.now()
+        val requests = storageService.loadRequests(username).toMutableList()
+        val index = requests.indexOfFirst { it.id == id }
+        if (index == -1) return
+        val current = requests[index]
+        if (current.status == RequestStatus.CANCELLED) return
+        val isDone = status == RequestStatus.DONE || status == RequestStatus.FAILED
+        val duration = if (isDone && current.processingStartedAt != null)
+            (now.toEpochMilli() - Instant.parse(current.processingStartedAt).toEpochMilli()) / 1000
+        else current.durationSeconds.toLong()
+        val updated = current.copy(
+            status = status,
+            processingStartedAt = if (status == RequestStatus.PROCESSING) now.toString() else current.processingStartedAt,
+            completedAt = if (isDone) now.toString() else null,
+            summaryText = summaryText,
+            costUsd = costUsd,
+            durationSeconds = if (isDone) duration.toInt() else current.durationSeconds
+        )
+        requests[index] = updated
+        storageService.saveRequests(username, requests)
+        webSocketHandler.broadcast(updated)
     }
 
     private fun updateStatus(

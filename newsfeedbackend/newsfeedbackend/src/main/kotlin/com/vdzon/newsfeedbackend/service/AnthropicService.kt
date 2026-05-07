@@ -1,6 +1,7 @@
 package com.vdzon.newsfeedbackend.service
 
 import com.vdzon.newsfeedbackend.model.CategorySettings
+import com.vdzon.newsfeedbackend.model.FeedItem
 import com.vdzon.newsfeedbackend.model.NewsItem
 import com.vdzon.newsfeedbackend.model.RssItem
 import org.slf4j.LoggerFactory
@@ -441,85 +442,72 @@ class AnthropicService(
         return Pair(text.trim(), cost)
     }
 
-    // Genereert een dagelijks redactioneel overzicht van alle gevonden artikelen
-    fun generateDailySummary(articles: List<NewsItem>, categories: List<String>): Pair<NewsItem, Double> {
-        if (articles.isEmpty()) {
-            val empty = NewsItem(
-                id = UUID.randomUUID().toString(),
-                title = "Dagelijks overzicht",
-                summary = "Geen artikelen beschikbaar voor het dagelijks overzicht.",
-                url = "",
-                category = "dagelijks-overzicht",
-                timestamp = Instant.now().toString(),
-                source = "Daily Summary",
-                isSummary = true
-            )
-            return Pair(empty, 0.0)
-        }
-
-        val categoryList = categories.joinToString(", ")
-        val articleList = articles.take(50).mapIndexed { i, a ->
-            "${i + 1}. [${a.category}] ${a.title}\n   ${a.summary.take(200)}"
+    // Genereert een dagelijkse samenvatting op basis van FeedItems en RSS-items
+    fun generateDailySummaryFromRss(
+        feedItems: List<FeedItem>,
+        allRssItems: List<RssItem>,
+        categories: List<CategorySettings>,
+        likedTitles: List<String>,
+        topicHistoryContext: String
+    ): Pair<String, Double> {
+        val categoryNames = categories.filter { it.enabled && !it.isSystem }.map { it.name }
+        val feedList = feedItems.take(60).mapIndexed { i, item ->
+            "${i+1}. [${item.category}] ${item.title}\n   ${item.summary.take(300)}"
         }.joinToString("\n\n")
+        val allList = allRssItems.filter { !it.inFeed }.take(100).mapIndexed { i, item ->
+            "${i+1}. [${item.category}] ${item.title} — ${item.summary.take(150)}"
+        }.joinToString("\n")
+
+        val today = LocalDate.now()
+        val months = listOf("januari", "februari", "maart", "april", "mei", "juni",
+            "juli", "augustus", "september", "oktober", "november", "december")
+        val todayNl = "${today.dayOfMonth} ${months[today.monthValue - 1]} ${today.year}"
 
         val prompt = """
-            Je bent een Nederlandse techredacteur die een dagelijkse briefing schrijft.
+            Je bent een Nederlandse techredacteur die een dagelijkse ochtendsbriefing schrijft voor een programmeur.
 
-            Schrijf een dagelijks redactioneel overzicht van 500-700 woorden op basis van de onderstaande nieuwsartikelen.
+            Schrijf een dagelijkse samenvatting op basis van het nieuws van de afgelopen 24 uur.
 
-            Categorieën van vandaag: $categoryList
+            Mijn interessegebieden: ${categoryNames.joinToString(", ")}
+            Gelikete onderwerpen (schrijf hier meer over): ${likedTitles.joinToString(", ")}
 
-            Artikelen:
-            $articleList
+            ## Feed-artikelen (geselecteerd als relevant):
+            $feedList
+
+            ## Overig RSS-nieuws (niet in feed, maar mogelijk interessant):
+            $allList
+
+            ## Topic-geschiedenis (recente trends):
+            $topicHistoryContext
+
+            Schrijf de samenvatting in het volgende formaat (gebruik echte Markdown headers):
+
+            # Dagelijkse Samenvatting — $todayNl
+
+            ## [Categorie naam 1]
+            [Wat er nieuw is en wat de impact is voor een programmeur/liefhebber. 2-4 alinea's.]
+
+            ## [Categorie naam 2]
+            [...]
+
+            ## Overig nieuws
+            [Kort overzicht van andere nieuwswaardige items die niet in de interessegebieden vallen maar toch de moeite waard zijn. Maximaal 5 bullets of korte alinea's.]
+
+            ## Trends
+            [Alleen als er duidelijke patronen zijn: benoem kort 2-3 trends die je herkent in het nieuws van de afgelopen tijd. Sla dit onderdeel over als er geen duidelijke trends zijn.]
 
             Richtlijnen:
-            - Schrijf in vloeiend, journalistiek Nederlands
-            - Groepeer per thema of categorie — NIET als opsomming
-            - Benoem de hot topics van vandaag
-            - Schrijf als een redactioneel essay, niet als een lijst
-            - Vermeld geen artikelnummers, URLs of bronnamen letterlijk
-            - Gebruik meerdere alinea's, gescheiden door een lege regel
-            - Eindig met een korte conclusie of vooruitblik
-
-            Geef je antwoord als ALLEEN een JSON object (geen uitleg, geen markdown):
-            {
-              "title": "Dagelijks overzicht — [thema of datum]",
-              "summary": "Eerste alinea.\n\nTweede alinea.\n\nDerde alinea."
-            }
+            - Schrijf in vloeiend journalistiek Nederlands
+            - Focus op impact en betekenis voor een programmeur/tech-liefhebber
+            - Noem geen artikelnummers of URLs
+            - Herhaal geen oud nieuws tenzij er een betekenisvolle update is (geef dan kort aan wat er veranderd is)
+            - De samenvatting mag 600-1000 woorden zijn
+            - Geef ALLEEN de markdown tekst terug, geen uitleg of JSON wrapper
         """.trimIndent()
 
         val (text, cost) = callWithRetry(prompt, summaryModel)
-        val json = extractJsonObject(text)
-        return try {
-            val root = objectMapper.readTree(json)
-            val title = root.path("title").asText("Dagelijks overzicht")
-            val summaryText = root.path("summary").asText(text.take(1000))
-            val item = NewsItem(
-                id = UUID.randomUUID().toString(),
-                title = title,
-                summary = summaryText,
-                url = "",
-                category = "dagelijks-overzicht",
-                timestamp = Instant.now().toString(),
-                source = "Daily Summary",
-                isSummary = true
-            )
-            log.info("Dagelijks overzicht gegenereerd: '{}'", title)
-            Pair(item, cost)
-        } catch (e: Exception) {
-            log.error("Dagelijks overzicht parsen mislukt: {}", e.message)
-            val item = NewsItem(
-                id = UUID.randomUUID().toString(),
-                title = "Dagelijks overzicht",
-                summary = text.take(1000),
-                url = "",
-                category = "dagelijks-overzicht",
-                timestamp = Instant.now().toString(),
-                source = "Daily Summary",
-                isSummary = true
-            )
-            Pair(item, cost)
-        }
+        log.info("Dagelijkse samenvatting gegenereerd: {} tekens, kosten \${}", text.length, "%.4f".format(cost))
+        return Pair(text.trim(), cost)
     }
 
     // Samenvatten van een artikel op basis van de volledige tekst (Tavily content)
@@ -784,6 +772,49 @@ class AnthropicService(
             log.error("Feed-selectie parsen mislukt: {}", e.message)
             Pair(emptyList(), cost)
         }
+    }
+
+    /**
+     * Genereert een rijke, uitgebreide Nederlandstalige samenvatting (400-600 woorden) voor een FeedItem
+     * op basis van een RssItem. Geeft de tekst en de kosten terug.
+     */
+    fun generateFeedItemSummary(rssItem: RssItem, categories: List<CategorySettings>): Pair<String, Double> {
+        val categoryName = categories.find {
+            it.id.equals(rssItem.category, ignoreCase = true) ||
+            it.name.equals(rssItem.category, ignoreCase = true)
+        }?.name ?: rssItem.category
+
+        val prompt = """
+            Je bent een Nederlandse tech-nieuwsredacteur die diepgaande artikelen schrijft voor programmeurs en tech-liefhebbers.
+
+            Schrijf een uitgebreide samenvatting van 400-600 woorden over het volgende artikel.
+
+            Titel: ${rssItem.title}
+            Bron: ${rssItem.source}
+            URL: ${rssItem.url}
+            Categorie: $categoryName
+
+            Korte samenvatting: ${rssItem.summary.take(500)}
+
+            Ruwe inhoud:
+            ${rssItem.snippet.take(1500)}
+
+            De samenvatting moet de volgende aspecten behandelen:
+            1. Wat er precies is gebeurd (gedetailleerd)
+            2. Waarom dit relevant is voor een programmeur of tech-liefhebber
+            3. Wat de impact en implicaties zijn
+            4. Eventuele bredere context
+
+            Richtlijnen:
+            - Schrijf vloeiende alinea's, geen opsommingslijst of markdown headers
+            - Schrijf in het Nederlands
+            - Geef de feitelijke inhoud, leg niet uit wat het artikel behandelt
+            - Geen JSON, geen markdown opmaak — alleen platte tekst
+        """.trimIndent()
+
+        val (text, cost) = callWithRetry(prompt, summaryModel)
+        log.info("FeedItem samenvatting gegenereerd voor '{}': {} tekens", rssItem.title.take(50), text.length)
+        return Pair(text.trim(), cost)
     }
 
     // ── Interne HTTP call ──────────────────────────────────────────────────────

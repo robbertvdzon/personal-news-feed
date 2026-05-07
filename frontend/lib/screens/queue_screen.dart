@@ -57,6 +57,9 @@ class QueueScreen extends ConsumerWidget {
                       itemCount: requests.length,
                       itemBuilder: (context, index) {
                         final request = requests[index];
+                        if (request.isDailySummary) {
+                          return _DailySummaryTile(request: request);
+                        }
                         if (request.isDailyUpdate) {
                           return _DailyUpdateTile(request: request);
                         }
@@ -364,6 +367,335 @@ class _DailyUpdateTile extends ConsumerWidget {
     if (diff.inHours < 24) return '${diff.inHours} uur geleden';
     return '${diff.inDays} dag${diff.inDays != 1 ? 'en' : ''} geleden';
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Daily Summary Tile (pinned, cannot be deleted, shows summary text)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _DailySummaryTile extends ConsumerWidget {
+  final NewsRequest request;
+
+  const _DailySummaryTile({required this.request});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      color: Theme.of(context).colorScheme.tertiaryContainer.withValues(alpha: 0.3),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: request.status == RequestStatus.done && request.summaryText.isNotEmpty
+            ? () => _showSummary(context, ref)
+            : null,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _StatusIcon(status: request.status),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Text(
+                          request.subject,
+                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                        ),
+                        const SizedBox(width: 6),
+                        Icon(Icons.push_pin, size: 12, color: Colors.grey[500]),
+                        const SizedBox(width: 4),
+                        Icon(Icons.auto_awesome, size: 12,
+                            color: Theme.of(context).colorScheme.tertiary),
+                      ],
+                    ),
+                  ),
+                  _StatusChip(status: request.status),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.schedule, size: 14, color: Colors.grey[500]),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Dagelijks om 06:00',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.grey[500],
+                        ),
+                  ),
+                  const Spacer(),
+                  if (request.status == RequestStatus.done) ...[
+                    if (request.costUsd > 0)
+                      Text(
+                        _formatCents(request.costUsd),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Colors.grey[700],
+                              fontWeight: FontWeight.w500,
+                            ),
+                      ),
+                    if (request.durationSeconds > 0) ...[
+                      const SizedBox(width: 6),
+                      Text(
+                        _formatDuration(request.durationSeconds),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Colors.grey[700],
+                              fontWeight: FontWeight.w500,
+                            ),
+                      ),
+                    ],
+                    const SizedBox(width: 8),
+                    Text(
+                      'Lees samenvatting →',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.tertiary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                    ),
+                  ],
+                  if (request.status == RequestStatus.processing)
+                    Row(
+                      children: [
+                        SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.orange[600],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        _ElapsedTimeText(
+                            since: request.processingStartedAt ?? request.createdAt),
+                      ],
+                    ),
+                  if (request.status == RequestStatus.processing ||
+                      request.status == RequestStatus.pending) ...[
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () =>
+                          ref.read(requestProvider.notifier).cancelRequest(request.id),
+                      child: Row(
+                        children: [
+                          Icon(Icons.stop_circle_outlined,
+                              size: 14, color: Colors.red[400]),
+                          const SizedBox(width: 4),
+                          Text('Annuleren',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: Colors.red[400],
+                                  )),
+                        ],
+                      ),
+                    ),
+                  ],
+                  if (request.status == RequestStatus.done ||
+                      request.status == RequestStatus.failed ||
+                      request.status == RequestStatus.cancelled) ...[
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () =>
+                          ref.read(requestProvider.notifier).rerunRequest(request),
+                      child: Row(
+                        children: [
+                          Icon(Icons.replay, size: 14, color: Colors.grey[500]),
+                          const SizedBox(width: 4),
+                          Text('Opnieuw',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: Colors.grey[500],
+                                  )),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showSummary(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.85,
+            maxWidth: 600,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 20, 16, 0),
+                child: Row(
+                  children: [
+                    Icon(Icons.auto_awesome,
+                        color: Theme.of(context).colorScheme.tertiary, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        request.subject,
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+              ),
+              if (request.completedAt != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 4, 24, 0),
+                  child: Text(
+                    _formatCompletedAt(request.completedAt!),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.grey[500],
+                        ),
+                  ),
+                ),
+              const Divider(height: 16),
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+                  child: _MarkdownText(text: request.summaryText),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    if (request.costUsd > 0)
+                      Text(
+                        'Kosten: ${_formatCents(request.costUsd)}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Colors.grey[500],
+                            ),
+                      ),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Sluiten'),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        ref.read(requestProvider.notifier).rerunRequest(request);
+                      },
+                      icon: const Icon(Icons.replay, size: 16),
+                      label: const Text('Opnieuw'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatCompletedAt(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 60) return 'Gegenereerd ${diff.inMinutes} min geleden';
+    if (diff.inHours < 24) return 'Gegenereerd ${diff.inHours} uur geleden';
+    return 'Gegenereerd op ${dt.day}-${dt.month}-${dt.year}';
+  }
+}
+
+/// Simpele markdown-naar-Flutter renderer (headers, bold, bullets)
+class _MarkdownText extends StatelessWidget {
+  final String text;
+
+  const _MarkdownText({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    final lines = text.split('\n');
+    final widgets = <Widget>[];
+
+    for (final line in lines) {
+      if (line.startsWith('# ')) {
+        widgets.add(Padding(
+          padding: const EdgeInsets.only(top: 12, bottom: 4),
+          child: Text(
+            line.substring(2),
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+          ),
+        ));
+      } else if (line.startsWith('## ')) {
+        widgets.add(Padding(
+          padding: const EdgeInsets.only(top: 16, bottom: 4),
+          child: Text(
+            line.substring(3),
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+          ),
+        ));
+      } else if (line.startsWith('### ')) {
+        widgets.add(Padding(
+          padding: const EdgeInsets.only(top: 10, bottom: 2),
+          child: Text(
+            line.substring(4),
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+          ),
+        ));
+      } else if (line.startsWith('- ') || line.startsWith('* ')) {
+        widgets.add(Padding(
+          padding: const EdgeInsets.only(left: 12, top: 2),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('• ', style: Theme.of(context).textTheme.bodyMedium),
+              Expanded(
+                child: Text(
+                  _stripBold(line.substring(2)),
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.5),
+                ),
+              ),
+            ],
+          ),
+        ));
+      } else if (line.trim().isEmpty) {
+        widgets.add(const SizedBox(height: 6));
+      } else {
+        widgets.add(Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Text(
+            _stripBold(line),
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.6),
+          ),
+        ));
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: widgets,
+    );
+  }
+
+  String _stripBold(String s) => s.replaceAll(RegExp(r'\*\*(.+?)\*\*'), r'$1');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

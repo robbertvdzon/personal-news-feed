@@ -16,6 +16,7 @@ class NewsItem {
   final bool inFeed;
   final String feedReason;
   final List<String> topics;
+  final String? feedItemId;
 
   const NewsItem({
     required this.id,
@@ -35,6 +36,7 @@ class NewsItem {
     this.inFeed = false,
     this.feedReason = '',
     this.topics = const [],
+    this.feedItemId,
   });
 
   factory NewsItem.fromJson(Map<String, dynamic> json) {
@@ -63,6 +65,7 @@ class NewsItem {
               ?.map((e) => e as String)
               .toList() ??
           [],
+      feedItemId: json['feedItemId'] as String?,
     );
   }
 
@@ -71,6 +74,7 @@ class NewsItem {
     bool? starred,
     bool? inFeed,
     Object? liked = _sentinel,
+    String? feedItemId,
   }) =>
       NewsItem(
         id: id,
@@ -90,6 +94,7 @@ class NewsItem {
         inFeed: inFeed ?? this.inFeed,
         feedReason: feedReason,
         topics: topics,
+        feedItemId: feedItemId ?? this.feedItemId,
       );
 }
 

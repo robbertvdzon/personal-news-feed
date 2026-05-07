@@ -15,6 +15,8 @@ data class NewsRequest(
     val newItemCount: Int = 0,
     val costUsd: Double = 0.0,
     val isDailyUpdate: Boolean = false,
+    val isDailySummary: Boolean = false,
+    val summaryText: String = "",
     val categoryResults: List<CategoryResult> = emptyList(),
     val processingStartedAt: String? = null,
     val durationSeconds: Int = 0

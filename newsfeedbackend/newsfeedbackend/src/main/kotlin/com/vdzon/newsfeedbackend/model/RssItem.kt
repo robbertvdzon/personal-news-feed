@@ -21,5 +21,6 @@ data class RssItem(
     val isRead: Boolean = false,
     val starred: Boolean = false,
     val liked: Boolean? = null,
-    val topics: List<String> = emptyList()
+    val topics: List<String> = emptyList(),
+    val feedItemId: String? = null
 )

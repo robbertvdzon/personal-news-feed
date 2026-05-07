@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/feed_provider.dart';
 import '../providers/news_provider.dart';
 import '../providers/settings_provider.dart';
 import '../widgets/app_logo.dart';
+import '../widgets/feed_card.dart';
 import '../widgets/news_card.dart';
 
 class NewsFeedScreen extends ConsumerWidget {
@@ -10,17 +12,26 @@ class NewsFeedScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final items = ref.watch(filteredNewsProvider);
-    final isLoading = ref.watch(newsLoadingProvider);
+    final feedTab = ref.watch(selectedFeedTabProvider);
+    final isRssTab = feedTab == 'rss';
+    final isFeedTab = feedTab == 'feed';
+
+    // Items for current tab
+    final rssItems = ref.watch(filteredNewsProvider);
+    final feedItems = ref.watch(filteredFeedProvider);
+
+    final isLoading = isFeedTab
+        ? ref.watch(feedLoadingProvider)
+        : ref.watch(newsLoadingProvider);
     final isRefreshing = ref.watch(sourceRefreshingProvider);
     final showRead = ref.watch(showReadProvider);
     final readCount = ref.watch(readCountProvider);
-    final feedTab = ref.watch(selectedFeedTabProvider);
-    final isRssTab = feedTab == 'rss';
 
     void syncRefresh() {
       if (isRssTab) {
         ref.read(rssItemsProvider.notifier).refresh();
+      } else if (isFeedTab) {
+        ref.read(feedProvider.notifier).refresh();
       } else {
         ref.read(newsProvider.notifier).refresh();
       }
@@ -95,26 +106,50 @@ class NewsFeedScreen extends ConsumerWidget {
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: () async => syncRefresh(),
-              child: items.isEmpty
-                  ? LayoutBuilder(
-                      builder: (context, constraints) => SingleChildScrollView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        child: SizedBox(
-                          height: constraints.maxHeight,
-                          child: _EmptyState(showRead: showRead, readCount: readCount),
-                        ),
-                      ),
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      itemCount: items.length,
-                      itemBuilder: (context, index) => NewsCard(
-                        item: items[index],
-                        allItems: items,
-                        index: index,
-                        showFeedStatus: isRssTab,
-                      ),
-                    ),
+              child: isFeedTab
+                  ? (feedItems.isEmpty
+                      ? LayoutBuilder(
+                          builder: (context, constraints) =>
+                              SingleChildScrollView(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            child: SizedBox(
+                              height: constraints.maxHeight,
+                              child: _EmptyState(
+                                  showRead: showRead, readCount: readCount),
+                            ),
+                          ),
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          itemCount: feedItems.length,
+                          itemBuilder: (context, index) => FeedCard(
+                            item: feedItems[index],
+                            allItems: feedItems,
+                            index: index,
+                          ),
+                        ))
+                  : (rssItems.isEmpty
+                      ? LayoutBuilder(
+                          builder: (context, constraints) =>
+                              SingleChildScrollView(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            child: SizedBox(
+                              height: constraints.maxHeight,
+                              child: _EmptyState(
+                                  showRead: showRead, readCount: readCount),
+                            ),
+                          ),
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          itemCount: rssItems.length,
+                          itemBuilder: (context, index) => NewsCard(
+                            item: rssItems[index],
+                            allItems: rssItems,
+                            index: index,
+                            showFeedStatus: isRssTab,
+                          ),
+                        )),
             ),
     );
   }

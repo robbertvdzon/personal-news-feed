@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../models/feed_item.dart';
 import '../models/news_item.dart';
+import '../providers/feed_provider.dart';
 import '../providers/news_provider.dart';
 import '../providers/request_provider.dart';
 import '../providers/settings_provider.dart';
 import '../widgets/category_badge.dart';
+import 'feed_item_detail_screen.dart';
 
 class ItemDetailScreen extends ConsumerStatefulWidget {
   final List<NewsItem> items;
@@ -322,6 +325,9 @@ class _ArticlePage extends ConsumerWidget {
             onTap: () => _openUrl(context),
           ),
           const SizedBox(height: 16),
+          if (item.feedItemId != null)
+            _OpenFeedItemButton(feedItemId: item.feedItemId!),
+          if (item.feedItemId != null) const SizedBox(height: 16),
           _MeerHieroverButton(item: item),
           const SizedBox(height: 16),
         ],
@@ -454,6 +460,55 @@ class _SourceLinkCard extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OpenFeedItemButton extends ConsumerWidget {
+  final String feedItemId;
+
+  const _OpenFeedItemButton({required this.feedItemId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Center(
+      child: OutlinedButton.icon(
+        onPressed: () => _openFeedItem(context, ref),
+        icon: const Icon(Icons.article_outlined, size: 18),
+        label: const Text('Open feed-item'),
+      ),
+    );
+  }
+
+  void _openFeedItem(BuildContext context, WidgetRef ref) {
+    final feedItems = ref.read(feedProvider).valueOrNull;
+    if (feedItems == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Feed-items nog niet geladen')),
+      );
+      return;
+    }
+    FeedItem? found;
+    for (final i in feedItems) {
+      if (i.id == feedItemId) {
+        found = i;
+        break;
+      }
+    }
+    if (found == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Feed-item niet gevonden')),
+      );
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FeedItemDetailScreen(
+          items: [found!],
+          initialIndex: 0,
         ),
       ),
     );

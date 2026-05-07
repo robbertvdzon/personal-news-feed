@@ -1,6 +1,7 @@
 package com.vdzon.newsfeedbackend.service
 
 import com.vdzon.newsfeedbackend.model.CategorySettings
+import com.vdzon.newsfeedbackend.model.FeedItem
 import com.vdzon.newsfeedbackend.model.NewsItem
 import com.vdzon.newsfeedbackend.model.NewsRequest
 import com.vdzon.newsfeedbackend.model.Podcast
@@ -30,6 +31,10 @@ class StorageService(
     // ── per-user rss items (nieuwe architectuur) ───────────────────────────────
     fun loadRssItems(username: String): List<RssItem> = readFile(userFile(username, "rss_items.json")) ?: emptyList()
     fun saveRssItems(username: String, items: List<RssItem>) = objectMapper.writeValue(userFile(username, "rss_items.json"), items)
+
+    // ── per-user feed items ────────────────────────────────────────────────────
+    fun loadFeedItems(username: String): List<FeedItem> = readFile(userFile(username, "feed_items.json")) ?: emptyList()
+    fun saveFeedItems(username: String, items: List<FeedItem>) = objectMapper.writeValue(userFile(username, "feed_items.json"), items)
 
     // ── per-user news (legacy — kept for subject requests) ────────────────────
     fun loadNews(username: String): List<NewsItem> = readFile(userFile(username, "news_items.json")) ?: emptyList()

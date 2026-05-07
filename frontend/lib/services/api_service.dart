@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../config/app_config.dart';
 import '../models/category.dart';
+import '../models/feed_item.dart';
 import '../models/news_item.dart';
 import '../models/news_request.dart';
 import '../models/podcast.dart' show Podcast, TtsProvider;
@@ -29,6 +30,74 @@ class ApiService {
     }
     final list = jsonDecode(response.body) as List<dynamic>;
     return list.map((e) => NewsItem.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  static Future<List<FeedItem>> fetchFeedItems() async {
+    final response = await _client.get(
+      Uri.parse('${AppConfig.apiBaseUrl}/api/feed'),
+      headers: _headers,
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Fout bij ophalen feed-items: ${response.statusCode}');
+    }
+    final list = jsonDecode(response.body) as List<dynamic>;
+    return list.map((e) => FeedItem.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  static Future<void> markFeedRead(String id) async {
+    await _client.put(
+      Uri.parse('${AppConfig.apiBaseUrl}/api/feed/$id/read'),
+      headers: _headers,
+    );
+  }
+
+  static Future<void> markFeedUnread(String id) async {
+    await _client.put(
+      Uri.parse('${AppConfig.apiBaseUrl}/api/feed/$id/unread'),
+      headers: _headers,
+    );
+  }
+
+  static Future<void> toggleFeedStar(String id) async {
+    await _client.put(
+      Uri.parse('${AppConfig.apiBaseUrl}/api/feed/$id/star'),
+      headers: _headers,
+    );
+  }
+
+  static Future<void> setFeedItemFeedback(String id, bool? liked) async {
+    await _client.put(
+      Uri.parse('${AppConfig.apiBaseUrl}/api/feed/$id/feedback'),
+      headers: _headers,
+      body: jsonEncode({'liked': liked}),
+    );
+  }
+
+  static Future<void> deleteFeedItem(String id) async {
+    await _client.delete(
+      Uri.parse('${AppConfig.apiBaseUrl}/api/feed/$id'),
+      headers: _headers,
+    );
+  }
+
+  static Future<int> cleanupFeed({
+    required int olderThanDays,
+    required bool keepStarred,
+    required bool keepLiked,
+    required bool keepUnread,
+  }) async {
+    final uri = Uri.parse('${AppConfig.apiBaseUrl}/api/feed/cleanup').replace(
+      queryParameters: {
+        'olderThanDays': '$olderThanDays',
+        'keepStarred': '$keepStarred',
+        'keepLiked': '$keepLiked',
+        'keepUnread': '$keepUnread',
+      },
+    );
+    final response = await _client.delete(uri, headers: _headers);
+    if (response.statusCode != 200) return 0;
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    return body['removed'] as int? ?? 0;
   }
 
   static Future<List<NewsItem>> fetchRssItems() async {

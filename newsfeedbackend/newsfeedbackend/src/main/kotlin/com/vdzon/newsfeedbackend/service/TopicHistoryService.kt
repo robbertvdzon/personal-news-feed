@@ -1,5 +1,6 @@
 package com.vdzon.newsfeedbackend.service
 
+import com.vdzon.newsfeedbackend.model.FeedItem
 import com.vdzon.newsfeedbackend.model.NewsItem
 import com.vdzon.newsfeedbackend.model.RssItem
 import com.vdzon.newsfeedbackend.model.TopicEntry
@@ -143,6 +144,37 @@ class TopicHistoryService(
 
     /** Verwerk het opslaan (ster) van een RSS-item. */
     fun onRssItemStarred(username: String, item: RssItem, nowStarred: Boolean) {
+        if (item.topics.isEmpty()) return
+        val entries = storageService.loadTopicHistory(username).toMutableList()
+        val delta = if (nowStarred) 1 else -1
+        item.topics.forEach { topic ->
+            val existing = findExisting(entries, topic)
+            if (existing != null) {
+                val idx = entries.indexOf(existing)
+                entries[idx] = existing.copy(starredCount = (existing.starredCount + delta).coerceAtLeast(0))
+            }
+        }
+        storageService.saveTopicHistory(username, entries)
+    }
+
+    // ── Feedback-updates (FeedItem) ───────────────────────────────────────────
+
+    /** Verwerk een like of dislike op een FeedItem. */
+    fun onFeedItemFeedback(username: String, item: FeedItem, liked: Boolean?) {
+        if (liked != true || item.topics.isEmpty()) return
+        val entries = storageService.loadTopicHistory(username).toMutableList()
+        item.topics.forEach { topic ->
+            val existing = findExisting(entries, topic)
+            if (existing != null) {
+                val idx = entries.indexOf(existing)
+                entries[idx] = existing.copy(likedCount = existing.likedCount + 1)
+            }
+        }
+        storageService.saveTopicHistory(username, entries)
+    }
+
+    /** Verwerk het opslaan (ster) van een FeedItem. */
+    fun onFeedItemStarred(username: String, item: FeedItem, nowStarred: Boolean) {
         if (item.topics.isEmpty()) return
         val entries = storageService.loadTopicHistory(username).toMutableList()
         val delta = if (nowStarred) 1 else -1

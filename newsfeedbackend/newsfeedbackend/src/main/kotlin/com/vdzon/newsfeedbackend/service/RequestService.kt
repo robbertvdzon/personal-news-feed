@@ -6,11 +6,13 @@ import com.vdzon.newsfeedbackend.model.RequestStatus
 import com.vdzon.newsfeedbackend.websocket.RequestWebSocketHandler
 import jakarta.annotation.PostConstruct
 import org.slf4j.LoggerFactory
+import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
 import java.time.Instant
 import java.util.UUID
 
 const val DAILY_UPDATE_ID_PREFIX = "daily-update-"
+const val DAILY_SUMMARY_ID_PREFIX = "daily-summary-"
 
 @Service
 class RequestService(
@@ -55,6 +57,7 @@ class RequestService(
 
     fun getAll(username: String): List<NewsRequest> {
         ensureDailyUpdateExists(username)
+        ensureDailySummaryExists(username)
         return storageService.loadRequests(username)
     }
 
@@ -78,6 +81,7 @@ class RequestService(
 
     fun delete(username: String, id: String) {
         if (id.startsWith(DAILY_UPDATE_ID_PREFIX)) return
+        if (id.startsWith(DAILY_SUMMARY_ID_PREFIX)) return
         val requests = storageService.loadRequests(username).toMutableList()
         requests.removeIf { it.id == id }
         storageService.saveRequests(username, requests)
@@ -92,13 +96,16 @@ class RequestService(
             completedAt = null,
             newItemCount = 0,
             costUsd = 0.0,
+            summaryText = "",
             categoryResults = emptyList()
         )
         requests[index] = reset
         storageService.saveRequests(username, requests)
         webSocketHandler.broadcast(reset)
 
-        if (reset.isDailyUpdate) {
+        if (reset.isDailySummary) {
+            requestProcessor.processDailySummary(username, reset.id)
+        } else if (reset.isDailyUpdate) {
             requestProcessor.processDailyUpdate(username, reset.id)
         } else {
             requestProcessor.processRequest(username, reset)
@@ -125,12 +132,39 @@ class RequestService(
         requestProcessor.processDailyUpdate(username, reset.id)
     }
 
+    @Scheduled(cron = "0 0 6 * * *")
+    fun scheduledDailySummary() {
+        log.info("Dagelijkse samenvatting gestart (06:00)")
+        val usernames = storageService.getAllUsernames()
+        for (username in usernames) {
+            try {
+                ensureDailySummaryExists(username)
+                val requests = storageService.loadRequests(username)
+                val summaryRequest = requests.firstOrNull { it.isDailySummary } ?: continue
+                val reset = summaryRequest.copy(
+                    status = RequestStatus.PENDING,
+                    completedAt = null,
+                    summaryText = ""
+                )
+                val updated = requests.toMutableList()
+                val index = updated.indexOfFirst { it.isDailySummary }
+                updated[index] = reset
+                storageService.saveRequests(username, updated)
+                webSocketHandler.broadcast(reset)
+                requestProcessor.processDailySummary(username, reset.id)
+            } catch (e: Exception) {
+                log.error("Dagelijkse samenvatting mislukt voor {}: {}", username, e.message)
+            }
+        }
+        log.info("Dagelijkse samenvatting gestart voor {} gebruiker(s)", usernames.size)
+    }
+
     private fun ensureDailyUpdateExists(username: String) {
         val requests = storageService.loadRequests(username)
         if (requests.none { it.isDailyUpdate }) {
             val dailyUpdate = NewsRequest(
                 id = "$DAILY_UPDATE_ID_PREFIX$username",
-                subject = "Dagelijkse Update",
+                subject = "Uurlijkse Update",
                 preferredCount = 5,
                 maxCount = 10,
                 isDailyUpdate = true,
@@ -141,6 +175,35 @@ class RequestService(
             newList.addAll(requests)
             storageService.saveRequests(username, newList)
             log.info("Daily Update aangemaakt voor {}", username)
+        } else {
+            val migrateNeeded = requests.any { it.isDailyUpdate && it.subject == "Dagelijkse Update" }
+            if (migrateNeeded) {
+                val migrated = requests.map {
+                    if (it.isDailyUpdate && it.subject == "Dagelijkse Update")
+                        it.copy(subject = "Uurlijkse Update")
+                    else it
+                }
+                storageService.saveRequests(username, migrated)
+                log.info("Dagelijkse Updatevoor {}", username)
+            }
+        }
+    }
+
+    private fun ensureDailySummaryExists(username: String) {
+        val requests = storageService.loadRequests(username)
+        if (requests.none { it.isDailySummary }) {
+            val summary = NewsRequest(
+                id = "$DAILY_SUMMARY_ID_PREFIX$username",
+                subject = "Dagelijkse Samenvatting",
+                isDailySummary = true,
+                status = RequestStatus.PENDING,
+                createdAt = Instant.now().toString()
+            )
+            val newList = requests.toMutableList()
+            val insertAt = if (newList.isNotEmpty() && newList[0].isDailyUpdate) 1 else 0
+            newList.add(insertAt, summary)
+            storageService.saveRequests(username, newList)
+            log.info("Dagelijkse Samenvatting aangemaakt voor {}", username)
         }
     }
 

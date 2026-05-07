@@ -112,7 +112,10 @@ class NewsCard extends ConsumerWidget {
                         ),
                         if (showFeedStatus) ...[
                           const SizedBox(width: 6),
-                          _FeedStatusBadge(inFeed: item.inFeed),
+                          _FeedStatusBadge(
+                            inFeed: item.inFeed,
+                            reason: item.feedReason,
+                          ),
                         ],
                         const Spacer(),
                         Column(
@@ -262,12 +265,13 @@ class _StarButton extends StatelessWidget {
 
 class _FeedStatusBadge extends StatelessWidget {
   final bool inFeed;
+  final String reason;
 
-  const _FeedStatusBadge({required this.inFeed});
+  const _FeedStatusBadge({required this.inFeed, this.reason = ''});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final badge = Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: inFeed ? Colors.green[50] : Colors.grey[100],
@@ -296,6 +300,16 @@ class _FeedStatusBadge extends StatelessWidget {
           ),
         ],
       ),
+    );
+
+    if (reason.isEmpty) return badge;
+
+    return Tooltip(
+      message: reason,
+      preferBelow: true,
+      triggerMode: TooltipTriggerMode.tap,
+      showDuration: const Duration(seconds: 5),
+      child: badge,
     );
   }
 }

@@ -17,6 +17,8 @@ class NewsRequest {
   final int newItemCount;
   final double costUsd;
   final bool isDailyUpdate;
+  final bool isDailySummary;
+  final String summaryText;
   final List<CategoryResult> categoryResults;
   final DateTime? processingStartedAt;
   final int durationSeconds;
@@ -36,6 +38,8 @@ class NewsRequest {
     this.newItemCount = 0,
     this.costUsd = 0.0,
     this.isDailyUpdate = false,
+    this.isDailySummary = false,
+    this.summaryText = '',
     this.categoryResults = const [],
     this.processingStartedAt,
     this.durationSeconds = 0,
@@ -61,6 +65,8 @@ class NewsRequest {
       newItemCount: json['newItemCount'] as int? ?? 0,
       costUsd: (json['costUsd'] as num?)?.toDouble() ?? 0.0,
       isDailyUpdate: json['isDailyUpdate'] as bool? ?? false,
+      isDailySummary: json['isDailySummary'] as bool? ?? false,
+      summaryText: json['summaryText'] as String? ?? '',
       categoryResults: (json['categoryResults'] as List<dynamic>?)
               ?.map((e) => CategoryResult.fromJson(e as Map<String, dynamic>))
               .toList() ??
@@ -88,6 +94,7 @@ class NewsRequest {
     int? newItemCount,
     bool clearCompletedAt = false,
     double? costUsd,
+    String? summaryText,
     List<CategoryResult>? categoryResults,
     DateTime? processingStartedAt,
     int? durationSeconds,
@@ -107,6 +114,8 @@ class NewsRequest {
       newItemCount: newItemCount ?? this.newItemCount,
       costUsd: costUsd ?? this.costUsd,
       isDailyUpdate: isDailyUpdate,
+      isDailySummary: isDailySummary,
+      summaryText: summaryText ?? this.summaryText,
       categoryResults: categoryResults ?? this.categoryResults,
       processingStartedAt: processingStartedAt ?? this.processingStartedAt,
       durationSeconds: durationSeconds ?? this.durationSeconds,
