@@ -11,12 +11,14 @@ class NewsCard extends ConsumerWidget {
   final NewsItem item;
   final List<NewsItem> allItems;
   final int index;
+  final bool showFeedStatus;
 
   const NewsCard({
     super.key,
     required this.item,
     required this.allItems,
     required this.index,
+    this.showFeedStatus = false,
   });
 
   /// Wanneer het item aan de feed werd toegevoegd (relatief als recent, anders datum)
@@ -108,6 +110,10 @@ class NewsCard extends ConsumerWidget {
                           categoryId: item.category,
                           categoryName: category.name,
                         ),
+                        if (showFeedStatus) ...[
+                          const SizedBox(width: 6),
+                          _FeedStatusBadge(inFeed: item.inFeed),
+                        ],
                         const Spacer(),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
@@ -249,6 +255,46 @@ class _StarButton extends StatelessWidget {
           size: 18,
           color: active ? Colors.amber[600] : Colors.grey[400],
         ),
+      ),
+    );
+  }
+}
+
+class _FeedStatusBadge extends StatelessWidget {
+  final bool inFeed;
+
+  const _FeedStatusBadge({required this.inFeed});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: inFeed ? Colors.green[50] : Colors.grey[100],
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: inFeed ? Colors.green[300]! : Colors.grey[300]!,
+          width: 0.8,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            inFeed ? Icons.check_circle_outline : Icons.radio_button_unchecked,
+            size: 11,
+            color: inFeed ? Colors.green[600] : Colors.grey[400],
+          ),
+          const SizedBox(width: 3),
+          Text(
+            inFeed ? 'Feed' : 'Niet in feed',
+            style: TextStyle(
+              fontSize: 10,
+              color: inFeed ? Colors.green[700] : Colors.grey[500],
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
       ),
     );
   }

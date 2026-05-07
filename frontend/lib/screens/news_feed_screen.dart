@@ -112,6 +112,7 @@ class NewsFeedScreen extends ConsumerWidget {
                         item: items[index],
                         allItems: items,
                         index: index,
+                        showFeedStatus: isRssTab,
                       ),
                     ),
             ),
