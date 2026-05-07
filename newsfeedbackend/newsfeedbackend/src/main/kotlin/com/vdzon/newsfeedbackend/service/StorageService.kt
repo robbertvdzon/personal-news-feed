@@ -5,6 +5,7 @@ import com.vdzon.newsfeedbackend.model.NewsItem
 import com.vdzon.newsfeedbackend.model.NewsRequest
 import com.vdzon.newsfeedbackend.model.Podcast
 import com.vdzon.newsfeedbackend.model.RssFeedsSettings
+import com.vdzon.newsfeedbackend.model.RssItem
 import com.vdzon.newsfeedbackend.model.TopicEntry
 import com.vdzon.newsfeedbackend.model.User
 import org.springframework.beans.factory.annotation.Value
@@ -26,7 +27,11 @@ class StorageService(
     fun getAllUsernames(): List<String> =
         File(dataDir, "users").let { if (it.isDirectory) it.list()?.toList() ?: emptyList() else emptyList() }
 
-    // ── per-user news ──────────────────────────────────────────────────────────
+    // ── per-user rss items (nieuwe architectuur) ───────────────────────────────
+    fun loadRssItems(username: String): List<RssItem> = readFile(userFile(username, "rss_items.json")) ?: emptyList()
+    fun saveRssItems(username: String, items: List<RssItem>) = objectMapper.writeValue(userFile(username, "rss_items.json"), items)
+
+    // ── per-user news (legacy — kept for subject requests) ────────────────────
     fun loadNews(username: String): List<NewsItem> = readFile(userFile(username, "news_items.json")) ?: emptyList()
     fun saveNews(username: String, items: List<NewsItem>) = objectMapper.writeValue(userFile(username, "news_items.json"), items)
 

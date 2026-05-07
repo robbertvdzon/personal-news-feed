@@ -192,14 +192,6 @@ class _CategoryRow extends ConsumerWidget {
                       ),
                 ),
               ),
-              Text(
-                '${cat.preferredCount}–${cat.maxCount} art.',
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: Colors.grey[500]),
-              ),
-              const SizedBox(width: 8),
               Switch(
                 value: cat.enabled,
                 onChanged: (_) =>
@@ -228,23 +220,18 @@ class _EditCategoryDialog extends ConsumerStatefulWidget {
 class _EditCategoryDialogState extends ConsumerState<_EditCategoryDialog> {
   late TextEditingController _nameController;
   late TextEditingController _extraController;
-  late TextEditingController _preferredController;
-  late TextEditingController _maxController;
+
   @override
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.category.name);
     _extraController = TextEditingController(text: widget.category.extraInstructions);
-    _preferredController = TextEditingController(text: '${widget.category.preferredCount}');
-    _maxController = TextEditingController(text: '${widget.category.maxCount}');
   }
 
   @override
   void dispose() {
     _nameController.dispose();
     _extraController.dispose();
-    _preferredController.dispose();
-    _maxController.dispose();
     super.dispose();
   }
 
@@ -256,9 +243,6 @@ class _EditCategoryDialogState extends ConsumerState<_EditCategoryDialog> {
       notifier.updateName(id, newName);
     }
     notifier.updateExtraInstructions(id, _extraController.text.trim());
-    final preferred = int.tryParse(_preferredController.text) ?? widget.category.preferredCount;
-    final max = int.tryParse(_maxController.text) ?? widget.category.maxCount;
-    notifier.updateCounts(id, preferred, max.clamp(preferred, 99));
     Navigator.of(context).pop();
   }
 
@@ -344,38 +328,6 @@ class _EditCategoryDialogState extends ConsumerState<_EditCategoryDialog> {
               ),
               maxLines: 6,
               minLines: 4,
-            ),
-            const SizedBox(height: 16),
-
-            // Gewenst en maximaal aantal
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _preferredController,
-                    decoration: const InputDecoration(
-                      labelText: 'Gewenst aantal',
-                      hintText: '3',
-                      border: OutlineInputBorder(),
-                    ),
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: _maxController,
-                    decoration: const InputDecoration(
-                      labelText: 'Maximum',
-                      hintText: '5',
-                      border: OutlineInputBorder(),
-                    ),
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  ),
-                ),
-              ],
             ),
           ],
         ),

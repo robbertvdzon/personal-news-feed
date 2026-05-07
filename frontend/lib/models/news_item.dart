@@ -9,9 +9,13 @@ class NewsItem {
   final bool isRead;
   final bool starred;
   final bool? liked; // null = geen feedback, true = geliked, false = gedisliked
-  final bool isSummary;
+  final String feedUrl;
+  final String snippet;
   final DateTime? publishedDate;
-  final String? feedUrl;
+  final DateTime? processedAt;
+  final bool inFeed;
+  final String feedReason;
+  final List<String> topics;
 
   const NewsItem({
     required this.id,
@@ -24,32 +28,51 @@ class NewsItem {
     this.isRead = false,
     this.starred = false,
     this.liked,
-    this.isSummary = false,
+    this.feedUrl = '',
+    this.snippet = '',
     this.publishedDate,
-    this.feedUrl,
+    this.processedAt,
+    this.inFeed = false,
+    this.feedReason = '',
+    this.topics = const [],
   });
 
   factory NewsItem.fromJson(Map<String, dynamic> json) {
     return NewsItem(
       id: json['id'] as String,
       title: json['title'] as String,
-      summary: json['summary'] as String,
+      summary: json['summary'] as String? ?? '',
       url: json['url'] as String,
-      category: json['category'] as String,
+      category: json['category'] as String? ?? '',
       timestamp: DateTime.parse(json['timestamp'] as String),
       source: json['source'] as String,
       isRead: json['isRead'] as bool? ?? false,
       starred: json['starred'] as bool? ?? false,
       liked: json['liked'] as bool?,
-      isSummary: json['isSummary'] as bool? ?? false,
+      feedUrl: json['feedUrl'] as String? ?? '',
+      snippet: json['snippet'] as String? ?? '',
       publishedDate: json['publishedDate'] != null
           ? DateTime.tryParse(json['publishedDate'] as String)
           : null,
-      feedUrl: json['feedUrl'] as String?,
+      processedAt: json['processedAt'] != null
+          ? DateTime.tryParse(json['processedAt'] as String)
+          : null,
+      inFeed: json['inFeed'] as bool? ?? false,
+      feedReason: json['feedReason'] as String? ?? '',
+      topics: (json['topics'] as List<dynamic>?)
+              ?.map((e) => e as String)
+              .toList() ??
+          [],
     );
   }
 
-  NewsItem copyWith({bool? isRead, bool? starred, bool? isSummary, Object? liked = _sentinel}) => NewsItem(
+  NewsItem copyWith({
+    bool? isRead,
+    bool? starred,
+    bool? inFeed,
+    Object? liked = _sentinel,
+  }) =>
+      NewsItem(
         id: id,
         title: title,
         summary: summary,
@@ -60,9 +83,13 @@ class NewsItem {
         isRead: isRead ?? this.isRead,
         starred: starred ?? this.starred,
         liked: liked == _sentinel ? this.liked : liked as bool?,
-        isSummary: isSummary ?? this.isSummary,
-        publishedDate: publishedDate,
         feedUrl: feedUrl,
+        snippet: snippet,
+        publishedDate: publishedDate,
+        processedAt: processedAt,
+        inFeed: inFeed ?? this.inFeed,
+        feedReason: feedReason,
+        topics: topics,
       );
 }
 

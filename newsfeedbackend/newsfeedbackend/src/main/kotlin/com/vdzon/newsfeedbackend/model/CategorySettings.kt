@@ -5,7 +5,5 @@ data class CategorySettings(
     val name: String,
     val enabled: Boolean = true,
     val extraInstructions: String = "",
-    val isSystem: Boolean = false,
-    val preferredCount: Int = 3,
-    val maxCount: Int = 5
+    val isSystem: Boolean = false
 )

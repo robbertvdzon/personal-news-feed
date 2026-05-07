@@ -80,8 +80,6 @@ class RequestNotifier extends AsyncNotifier<List<NewsRequest>> {
     required String subject,
     String? sourceItemId,
     String? sourceItemTitle,
-    int preferredCount = 2,
-    int maxCount = 5,
     String extraInstructions = '',
     int maxAgeDays = 3,
   }) async {
@@ -92,8 +90,6 @@ class RequestNotifier extends AsyncNotifier<List<NewsRequest>> {
       subject: subject,
       sourceItemId: sourceItemId,
       sourceItemTitle: sourceItemTitle,
-      preferredCount: preferredCount,
-      maxCount: maxCount,
       extraInstructions: extraInstructions,
       maxAgeDays: maxAgeDays,
       status: RequestStatus.pending,
@@ -107,8 +103,6 @@ class RequestNotifier extends AsyncNotifier<List<NewsRequest>> {
         subject: subject,
         sourceItemId: sourceItemId,
         sourceItemTitle: sourceItemTitle,
-        preferredCount: preferredCount,
-        maxCount: maxCount,
         extraInstructions: extraInstructions,
         maxAgeDays: maxAgeDays,
       );

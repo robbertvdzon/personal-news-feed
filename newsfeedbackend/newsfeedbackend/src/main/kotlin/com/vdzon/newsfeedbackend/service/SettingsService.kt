@@ -20,13 +20,12 @@ class SettingsService(
         storageService.saveSettings(username, categories)
 
     private fun defaultCategories() = listOf(
-        CategorySettings("kotlin", "Kotlin", enabled = true, isSystem = false, preferredCount = 3, maxCount = 5),
-        CategorySettings("flutter", "Flutter", enabled = true, isSystem = false, preferredCount = 3, maxCount = 5),
-        CategorySettings("ai", "Artificiële Intelligentie", enabled = true, isSystem = false, preferredCount = 3, maxCount = 5),
-        CategorySettings("blockchain", "Blockchain", enabled = false, isSystem = false, preferredCount = 3, maxCount = 5),
-        CategorySettings("spring", "Spring", enabled = true, isSystem = false, preferredCount = 3, maxCount = 5),
-        CategorySettings("web_dev", "Web Development", enabled = true, isSystem = false, preferredCount = 3, maxCount = 5),
+        CategorySettings("kotlin", "Kotlin", enabled = true, isSystem = false),
+        CategorySettings("flutter", "Flutter", enabled = true, isSystem = false),
+        CategorySettings("ai", "Artificiële Intelligentie", enabled = true, isSystem = false),
+        CategorySettings("blockchain", "Blockchain", enabled = false, isSystem = false),
+        CategorySettings("spring", "Spring", enabled = true, isSystem = false),
+        CategorySettings("web_dev", "Web Development", enabled = true, isSystem = false),
         CategorySettings("overig", "Overig", enabled = true, isSystem = true),
-        CategorySettings("dagelijks-overzicht", "Dagelijks overzicht", enabled = true, isSystem = true),
     )
 }

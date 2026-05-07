@@ -98,6 +98,9 @@ class ReadItemsNotifier extends Notifier<Set<String>> {
 final readItemsProvider =
     NotifierProvider<ReadItemsNotifier, Set<String>>(ReadItemsNotifier.new);
 
+// Geselecteerde tab: 'feed' of 'rss'
+final selectedFeedTabProvider = StateProvider<String>((ref) => 'feed');
+
 // Geselecteerde categorie (null = alles)
 final selectedCategoryProvider = StateProvider<String?>((ref) => null);
 
@@ -107,14 +110,26 @@ final showReadProvider = StateProvider<bool>((ref) => false);
 // Toon alleen bewaarde (gesterrde) items
 final showStarredProvider = StateProvider<bool>((ref) => false);
 
-// Nieuws van de backend
+// Nieuws van de backend (feed-items: inFeed=true)
 class NewsNotifier extends AsyncNotifier<List<NewsItem>> {
   @override
   Future<List<NewsItem>> build() async {
     final auth = ref.watch(authProvider).valueOrNull;
     if (auth?.isLoggedIn != true) return [];
     final items = await ApiService.fetchNews();
-    // Initialiseer lokale caches vanuit backend staat
+    _syncCachesFromItems(items);
+    return items;
+  }
+
+  Future<void> refresh() async {
+    state = const AsyncLoading();
+    final items = await AsyncValue.guard(ApiService.fetchNews);
+    state = items;
+    final loaded = items.valueOrNull;
+    if (loaded != null) _syncCachesFromItems(loaded);
+  }
+
+  void _syncCachesFromItems(List<NewsItem> items) {
     final alreadyRead = items.where((i) => i.isRead).map((i) => i.id).toSet();
     ref.read(readItemsProvider.notifier).initFromBackend(alreadyRead);
     final alreadyStarred = items.where((i) => i.starred).map((i) => i.id).toSet();
@@ -123,25 +138,6 @@ class NewsNotifier extends AsyncNotifier<List<NewsItem>> {
       for (final i in items) if (i.liked != null) i.id: i.liked
     };
     ref.read(feedbackProvider.notifier).initFromBackend(feedbackMap);
-    return items;
-  }
-
-  Future<void> refresh() async {
-    state = const AsyncLoading();
-    final items = await AsyncValue.guard(ApiService.fetchNews);
-    state = items;
-    // Sync caches na refresh
-    final loaded = items.valueOrNull;
-    if (loaded != null) {
-      final alreadyRead = loaded.where((i) => i.isRead).map((i) => i.id).toSet();
-      ref.read(readItemsProvider.notifier).initFromBackend(alreadyRead);
-      final alreadyStarred = loaded.where((i) => i.starred).map((i) => i.id).toSet();
-      ref.read(starredItemsProvider.notifier).initFromBackend(alreadyStarred);
-      final feedbackMap = {
-        for (final i in loaded) if (i.liked != null) i.id: i.liked
-      };
-      ref.read(feedbackProvider.notifier).initFromBackend(feedbackMap);
-    }
   }
 
   void setItems(List<NewsItem> items) {
@@ -175,27 +171,24 @@ class NewsNotifier extends AsyncNotifier<List<NewsItem>> {
     // Poll elke 4 seconden zodat nieuwe artikelen direct zichtbaar zijn
     final pollTimer = Timer.periodic(const Duration(seconds: 4), (_) async {
       try {
-        final items = await ApiService.fetchNews();
+        final feedItems = await ApiService.fetchNews();
+        final rssItems = await ApiService.fetchRssItems();
         if (state.valueOrNull != null) {
-          state = AsyncData(items);
-          _syncCaches(items);
+          state = AsyncData(feedItems);
+          _syncCachesFromItems(feedItems);
         }
+        ref.read(rssItemsProvider.notifier).setItems(rssItems);
       } catch (_) {}
     });
     try {
       await ApiService.refreshNews();
       await refresh();
+      // Ververs ook de RSS-items
+      ref.read(rssItemsProvider.notifier).refresh();
     } finally {
       pollTimer.cancel();
       ref.read(_sourceRefreshingProvider.notifier).state = false;
     }
-  }
-
-  void _syncCaches(List<NewsItem> items) {
-    final alreadyRead = items.where((i) => i.isRead).map((i) => i.id).toSet();
-    ref.read(readItemsProvider.notifier).initFromBackend(alreadyRead);
-    final alreadyStarred = items.where((i) => i.starred).map((i) => i.id).toSet();
-    ref.read(starredItemsProvider.notifier).initFromBackend(alreadyStarred);
   }
 }
 
@@ -207,15 +200,49 @@ final _sourceRefreshingProvider = StateProvider<bool>((ref) => false);
 final sourceRefreshingProvider = Provider<bool>((ref) =>
     ref.watch(_sourceRefreshingProvider));
 
-// Gefilterde nieuwslijst (leeg tijdens laden)
+// Alle RSS-items (inclusief niet-feed items)
+class RssItemsNotifier extends AsyncNotifier<List<NewsItem>> {
+  @override
+  Future<List<NewsItem>> build() async {
+    final auth = ref.watch(authProvider).valueOrNull;
+    if (auth?.isLoggedIn != true) return [];
+    return ApiService.fetchRssItems();
+  }
+
+  Future<void> refresh() async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(ApiService.fetchRssItems);
+  }
+
+  void setItems(List<NewsItem> items) {
+    state = AsyncData(items);
+  }
+}
+
+final rssItemsProvider =
+    AsyncNotifierProvider<RssItemsNotifier, List<NewsItem>>(RssItemsNotifier.new);
+
+// Gefilterde nieuwslijst — feed-tab (inFeed=true items met categorie/gelezen filters)
 final filteredNewsProvider = Provider<List<NewsItem>>((ref) {
+  final feedTab = ref.watch(selectedFeedTabProvider);
+  final showStarred = ref.watch(showStarredProvider);
+  final readItems = ref.watch(readItemsProvider);
+  final starredItems = ref.watch(starredItemsProvider);
+
+  if (feedTab == 'rss') {
+    // RSS-tab: toon alle items chronologisch
+    final items = ref.watch(rssItemsProvider).valueOrNull ?? [];
+    final showRead = ref.watch(showReadProvider);
+    return items
+        .where((item) => showRead || !readItems.contains(item.id))
+        .toList()
+      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+  }
+
   final items = ref.watch(newsProvider).valueOrNull ?? [];
   final enabledIds = ref.watch(enabledCategoryIdsProvider);
   final selectedCategory = ref.watch(selectedCategoryProvider);
   final showRead = ref.watch(showReadProvider);
-  final showStarred = ref.watch(showStarredProvider);
-  final readItems = ref.watch(readItemsProvider);
-  final starredItems = ref.watch(starredItemsProvider);
 
   if (showStarred) {
     // Bewaard-tab: toon alle gesterrde items (ook gelezen), geen categorie-filter
@@ -226,7 +253,7 @@ final filteredNewsProvider = Provider<List<NewsItem>>((ref) {
   }
 
   return items
-      .where((item) => item.isSummary || enabledIds.contains(item.category))
+      .where((item) => enabledIds.contains(item.category))
       .where((item) =>
           selectedCategory == null ||
           item.category == selectedCategory)
@@ -237,6 +264,8 @@ final filteredNewsProvider = Provider<List<NewsItem>>((ref) {
 
 // Of de nieuws-feed nog aan het laden is
 final newsLoadingProvider = Provider<bool>((ref) {
+  final feedTab = ref.watch(selectedFeedTabProvider);
+  if (feedTab == 'rss') return ref.watch(rssItemsProvider).isLoading;
   return ref.watch(newsProvider).isLoading;
 });
 
@@ -249,11 +278,7 @@ final unreadCountByCategoryProvider = Provider<Map<String, int>>((ref) {
   for (final item in items) {
     final isUnread = !readItems.contains(item.id) && !item.isRead;
     if (!isUnread) continue;
-    if (item.isSummary) {
-      // Dagelijks overzicht telt mee voor de 'dagelijks-overzicht' tab
-      counts[item.category] = (counts[item.category] ?? 0) + 1;
-    } else if (enabledIds.contains(item.category)) {
-      // Gewone items alleen tellen als de categorie actief is
+    if (enabledIds.contains(item.category)) {
       counts[item.category] = (counts[item.category] ?? 0) + 1;
     }
   }

@@ -31,6 +31,18 @@ class ApiService {
     return list.map((e) => NewsItem.fromJson(e as Map<String, dynamic>)).toList();
   }
 
+  static Future<List<NewsItem>> fetchRssItems() async {
+    final response = await _client.get(
+      Uri.parse('${AppConfig.apiBaseUrl}/api/rss-items'),
+      headers: _headers,
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Fout bij ophalen RSS-items: ${response.statusCode}');
+    }
+    final list = jsonDecode(response.body) as List<dynamic>;
+    return list.map((e) => NewsItem.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
   static Future<List<NewsRequest>> fetchRequests() async {
     final response = await _client.get(
       Uri.parse('${AppConfig.apiBaseUrl}/api/requests'),
@@ -245,8 +257,6 @@ class ApiService {
     required String subject,
     String? sourceItemId,
     String? sourceItemTitle,
-    int preferredCount = 2,
-    int maxCount = 5,
     String extraInstructions = '',
     int maxAgeDays = 3,
   }) async {
@@ -254,8 +264,6 @@ class ApiService {
       'subject': subject,
       if (sourceItemId != null) 'sourceItemId': sourceItemId,
       if (sourceItemTitle != null) 'sourceItemTitle': sourceItemTitle,
-      'preferredCount': preferredCount,
-      'maxCount': maxCount,
       if (extraInstructions.isNotEmpty) 'extraInstructions': extraInstructions,
       'maxAgeDays': maxAgeDays,
     });

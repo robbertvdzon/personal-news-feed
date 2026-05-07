@@ -1,6 +1,8 @@
 package com.vdzon.newsfeedbackend.service
 
+import com.vdzon.newsfeedbackend.model.CategorySettings
 import com.vdzon.newsfeedbackend.model.NewsItem
+import com.vdzon.newsfeedbackend.model.RssItem
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.client.SimpleClientHttpRequestFactory
@@ -615,6 +617,172 @@ class AnthropicService(
         } catch (e: Exception) {
             log.error("News topics parsen mislukt: {}", e.message)
             Pair(emptyMap(), cost)
+        }
+    }
+
+    // ─── RSS-item verwerking ──────────────────────────────────────────────────
+
+    data class RssItemSummary(
+        val title: String,
+        val summary: String,
+        val category: String,
+        val topics: List<String> = emptyList()
+    )
+
+    data class FeedSelectionResult(
+        val url: String,
+        val inFeed: Boolean,
+        val reason: String
+    )
+
+    /**
+     * Vat een RSS-item samen, wijs het toe aan een categorie en extraheer topics.
+     * Gebruikt de snippet (1000 tekens) uit de RSS feed als bron.
+     */
+    fun summarizeRssItem(
+        item: TavilySearchResult,
+        categories: List<CategorySettings>
+    ): Pair<RssItemSummary, Double> {
+        val categoryList = categories.filter { !it.isSystem && it.enabled }.joinToString(", ") { it.name }
+        val datePart = if (item.publishedDate != null) "\nDatum: ${item.publishedDate}" else ""
+
+        val prompt = """
+            Je bent een Nederlandse tech-nieuwsredacteur.
+
+            Schrijf een samenvatting van het volgende artikel en wijs het toe aan de beste categorie.
+
+            Titel: ${item.title}
+            Bron: ${item.source}
+            URL: ${item.url}$datePart
+
+            Inhoud:
+            ${item.snippet.take(1000)}
+
+            Beschikbare categorieën: $categoryList
+
+            Richtlijnen:
+            - Schrijf een samenvatting van 150-250 woorden
+            - Schrijf de INHOUD — wat er is gebeurd, wat is er gezegd, wat zijn de bevindingen
+            - Leg NIET uit wat het artikel behandelt — geef gewoon de informatie zelf
+            - Schrijf in het Nederlands
+            - Wijs de BESTE categorie toe (exact één naam uit de lijst, of "overig" als niets past)
+            - Geef 2-3 canonieke onderwerpen (topics) in het Nederlands, elk 2-5 woorden
+
+            Geef ALLEEN een JSON-object, geen uitleg:
+            {
+              "title": "Artikel titel",
+              "summary": "Samenvatting...",
+              "category": "Categorie naam",
+              "topics": ["Onderwerp 1", "Onderwerp 2"]
+            }
+        """.trimIndent()
+
+        val (text, cost) = callWithRetry(prompt, summaryModel)
+        val json = extractJsonObject(text)
+        return try {
+            val root = objectMapper.readTree(json)
+            val topics = root.path("topics").let { arr ->
+                (0 until arr.size()).map { arr.get(it).asText("") }.filter { it.isNotBlank() }
+            }
+            val result = RssItemSummary(
+                title = root.path("title").asText(item.title),
+                summary = root.path("summary").asText(""),
+                category = root.path("category").asText(""),
+                topics = topics
+            )
+            log.info("RSS-item samenvatting klaar voor '{}' → categorie '{}'", result.title.take(50), result.category)
+            Pair(result, cost)
+        } catch (e: Exception) {
+            log.error("RSS-item samenvatting parsen mislukt voor '{}': {}", item.title, e.message)
+            Pair(RssItemSummary(item.title, item.snippet.take(500), ""), cost)
+        }
+    }
+
+    /**
+     * Bepaalt in één batch-aanroep welke nieuwe RSS-items in de feed moeten komen.
+     * Geeft een lijst terug van {url, inFeed, reason}.
+     */
+    fun selectFeedItems(
+        newItems: List<RssItem>,
+        existingFeedItems: List<RssItem>,
+        categories: List<CategorySettings>,
+        likedTitles: List<String> = emptyList(),
+        dislikedTitles: List<String> = emptyList(),
+        topicHistoryContext: String = ""
+    ): Pair<List<FeedSelectionResult>, Double> {
+        if (newItems.isEmpty()) return Pair(emptyList(), 0.0)
+
+        val enabledCategories = categories.filter { it.enabled && !it.isSystem }
+
+        val newItemsList = newItems.take(60).mapIndexed { i, item ->
+            val catExtra = enabledCategories.find { it.name.equals(item.category, ignoreCase = true) }
+                ?.extraInstructions?.takeIf { it.isNotBlank() }?.let { " [instructies: $it]" } ?: ""
+            "${i + 1}. [${item.category}$catExtra] ${item.title}\n   ${item.summary.take(400)}"
+        }.joinToString("\n\n")
+
+        val existingContext = if (existingFeedItems.isNotEmpty()) {
+            "\n\nBestaande feed-items van de afgelopen tijd (vermijd dubbele onderwerpen):\n" +
+                existingFeedItems.take(30).joinToString("\n") { "- [${it.category}] ${it.title}" }
+        } else ""
+
+        val likedPart = if (likedTitles.isNotEmpty())
+            "\n\nGeliked door gebruiker (kies vergelijkbare artikelen):\n" +
+                likedTitles.take(10).joinToString("\n") { "- \"$it\"" }
+        else ""
+
+        val dislikedPart = if (dislikedTitles.isNotEmpty())
+            "\n\nNiet relevant gevonden door gebruiker (vermijd vergelijkbare artikelen):\n" +
+                dislikedTitles.take(10).joinToString("\n") { "- \"$it\"" }
+        else ""
+
+        val historyPart = if (topicHistoryContext.isNotBlank()) "\n\n$topicHistoryContext" else ""
+
+        val today = java.time.LocalDate.now()
+
+        val prompt = """
+            Bepaal voor elk van de volgende ${minOf(newItems.size, 60)} nieuwe RSS-artikelen of het in de persoonlijke nieuws-feed van de gebruiker moet komen.
+
+            Vandaag: $today
+            $existingContext$likedPart$dislikedPart$historyPart
+
+            Nieuwe artikelen om te beoordelen:
+            $newItemsList
+
+            Selectieregels:
+            - Selecteer 20-40% van de artikelen voor de feed (kwaliteit boven kwantiteit)
+            - Voeg artikelen toe die relevant, actueel en inhoudelijk interessant zijn
+            - Vermijd artikelen die al vertegenwoordigd zijn door bestaande feed-items
+            - Pas de gebruikers interesses en feedback toe
+            - Geef een korte Nederlandse reden (max 15 woorden) waarom het in de feed staat of niet
+
+            Geef ALLEEN een JSON-array, geen uitleg:
+            [{"index": 1, "inFeed": true, "reason": "Relevante nieuwe ontwikkeling"}, ...]
+        """.trimIndent()
+
+        val (text, cost) = callWithRetry(prompt, summaryModel, maxTokens = 3000)
+        return try {
+            val start = text.indexOf('[')
+            val end = text.lastIndexOf(']')
+            val json = if (start != -1 && end != -1) text.substring(start, end + 1) else "[]"
+            val root = objectMapper.readTree(json)
+            val results = mutableListOf<FeedSelectionResult>()
+            for (i in 0 until root.size()) {
+                val node = root.get(i)
+                val index = node.path("index").asInt(0)
+                if (index >= 1 && index <= newItems.size) {
+                    results.add(FeedSelectionResult(
+                        url = newItems[index - 1].url,
+                        inFeed = node.path("inFeed").asBoolean(false),
+                        reason = node.path("reason").asText("")
+                    ))
+                }
+            }
+            val inFeedCount = results.count { it.inFeed }
+            log.info("Feed-selectie: {}/{} artikelen in feed", inFeedCount, newItems.size)
+            Pair(results, cost)
+        } catch (e: Exception) {
+            log.error("Feed-selectie parsen mislukt: {}", e.message)
+            Pair(emptyList(), cost)
         }
     }
 

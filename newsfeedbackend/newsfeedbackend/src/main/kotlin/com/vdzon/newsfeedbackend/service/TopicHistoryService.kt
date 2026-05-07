@@ -1,6 +1,7 @@
 package com.vdzon.newsfeedbackend.service
 
 import com.vdzon.newsfeedbackend.model.NewsItem
+import com.vdzon.newsfeedbackend.model.RssItem
 import com.vdzon.newsfeedbackend.model.TopicEntry
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
@@ -93,9 +94,9 @@ class TopicHistoryService(
         log.info("Podcast topics bijgewerkt voor {}: {} onderwerpen ({} diep)", username, topics.size, deepTopics.size)
     }
 
-    // ── Feedback-updates ──────────────────────────────────────────────────────
+    // ── Feedback-updates (legacy NewsItem) ───────────────────────────────────
 
-    /** Verwerk een like of dislike op een artikel. */
+    /** Verwerk een like of dislike op een artikel (legacy). */
     fun onFeedback(username: String, item: NewsItem, liked: Boolean?) {
         if (liked != true || item.topics.isEmpty()) return
         val entries = storageService.loadTopicHistory(username).toMutableList()
@@ -105,12 +106,11 @@ class TopicHistoryService(
                 val idx = entries.indexOf(existing)
                 entries[idx] = existing.copy(likedCount = existing.likedCount + 1)
             }
-            // Geen nieuwe entry aanmaken voor likes alleen — topic moet al bekend zijn
         }
         storageService.saveTopicHistory(username, entries)
     }
 
-    /** Verwerk het opslaan (ster) van een artikel. */
+    /** Verwerk het opslaan (ster) van een artikel (legacy). */
     fun onStarred(username: String, item: NewsItem, nowStarred: Boolean) {
         if (item.topics.isEmpty()) return
         val entries = storageService.loadTopicHistory(username).toMutableList()
@@ -123,6 +123,66 @@ class TopicHistoryService(
             }
         }
         storageService.saveTopicHistory(username, entries)
+    }
+
+    // ── Feedback-updates (RssItem) ────────────────────────────────────────────
+
+    /** Verwerk een like of dislike op een RSS-item. */
+    fun onRssItemFeedback(username: String, item: RssItem, liked: Boolean?) {
+        if (liked != true || item.topics.isEmpty()) return
+        val entries = storageService.loadTopicHistory(username).toMutableList()
+        item.topics.forEach { topic ->
+            val existing = findExisting(entries, topic)
+            if (existing != null) {
+                val idx = entries.indexOf(existing)
+                entries[idx] = existing.copy(likedCount = existing.likedCount + 1)
+            }
+        }
+        storageService.saveTopicHistory(username, entries)
+    }
+
+    /** Verwerk het opslaan (ster) van een RSS-item. */
+    fun onRssItemStarred(username: String, item: RssItem, nowStarred: Boolean) {
+        if (item.topics.isEmpty()) return
+        val entries = storageService.loadTopicHistory(username).toMutableList()
+        val delta = if (nowStarred) 1 else -1
+        item.topics.forEach { topic ->
+            val existing = findExisting(entries, topic)
+            if (existing != null) {
+                val idx = entries.indexOf(existing)
+                entries[idx] = existing.copy(starredCount = (existing.starredCount + delta).coerceAtLeast(0))
+            }
+        }
+        storageService.saveTopicHistory(username, entries)
+    }
+
+    /** Werkt de topic-geschiedenis bij op basis van verwerkte RSS-items (met topics). */
+    fun mergeRssItemTopics(username: String, items: List<RssItem>) {
+        val itemsWithTopics = items.filter { it.topics.isNotEmpty() }
+        if (itemsWithTopics.isEmpty()) return
+        val entries = storageService.loadTopicHistory(username).toMutableList()
+        val now = Instant.now().toString()
+        itemsWithTopics.forEach { item ->
+            item.topics.forEach { topic ->
+                val existing = findExisting(entries, topic)
+                if (existing != null) {
+                    val idx = entries.indexOf(existing)
+                    entries[idx] = existing.copy(
+                        lastSeenNews = now,
+                        newsCount = existing.newsCount + 1
+                    )
+                } else {
+                    entries.add(TopicEntry(
+                        topic = topic,
+                        firstSeen = now,
+                        lastSeenNews = now,
+                        newsCount = 1
+                    ))
+                }
+            }
+        }
+        storageService.saveTopicHistory(username, entries)
+        log.info("RSS-item topics bijgewerkt voor {}: {} items", username, itemsWithTopics.size)
     }
 
     // ── Context-strings voor prompts ──────────────────────────────────────────

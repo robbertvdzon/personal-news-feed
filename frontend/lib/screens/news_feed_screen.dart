@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/news_provider.dart';
 import '../providers/settings_provider.dart';
-// unreadCountByCategoryProvider is exported via news_provider.dart
 import '../widgets/app_logo.dart';
 import '../widgets/news_card.dart';
 
@@ -16,6 +15,16 @@ class NewsFeedScreen extends ConsumerWidget {
     final isRefreshing = ref.watch(sourceRefreshingProvider);
     final showRead = ref.watch(showReadProvider);
     final readCount = ref.watch(readCountProvider);
+    final feedTab = ref.watch(selectedFeedTabProvider);
+    final isRssTab = feedTab == 'rss';
+
+    void syncRefresh() {
+      if (isRssTab) {
+        ref.read(rssItemsProvider.notifier).refresh();
+      } else {
+        ref.read(newsProvider.notifier).refresh();
+      }
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -32,9 +41,7 @@ class NewsFeedScreen extends ConsumerWidget {
           IconButton(
             tooltip: 'Herlaad',
             icon: const Icon(Icons.sync, size: 20),
-            onPressed: isLoading
-                ? null
-                : () => ref.read(newsProvider.notifier).refresh(),
+            onPressed: isLoading ? null : syncRefresh,
           ),
           isRefreshing
               ? const Padding(
@@ -48,7 +55,7 @@ class NewsFeedScreen extends ConsumerWidget {
                   ),
                 )
               : IconButton(
-                  tooltip: 'Ververs alle categorieën (RSS + AI)',
+                  tooltip: 'Ververs RSS-feeds en update feed (AI)',
                   icon: const Icon(Icons.cloud_download_outlined, size: 20),
                   onPressed: () =>
                       ref.read(newsProvider.notifier).refreshFromSource(),
@@ -73,12 +80,13 @@ class NewsFeedScreen extends ConsumerWidget {
           ),
         ],
         bottom: PreferredSize(
-          preferredSize: Size.fromHeight(isRefreshing ? 52 : 48),
+          preferredSize: Size.fromHeight(isRefreshing ? 100 : 96),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               if (isRefreshing) const LinearProgressIndicator(),
-              const _CategoryTabBar(),
+              const _FeedRssTabBar(),
+              if (!isRssTab) const _CategoryTabBar() else const SizedBox(height: 48),
             ],
           ),
         ),
@@ -86,7 +94,7 @@ class NewsFeedScreen extends ConsumerWidget {
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
-              onRefresh: () => ref.read(newsProvider.notifier).refresh(),
+              onRefresh: () async => syncRefresh(),
               child: items.isEmpty
                   ? LayoutBuilder(
                       builder: (context, constraints) => SingleChildScrollView(
@@ -110,6 +118,99 @@ class NewsFeedScreen extends ConsumerWidget {
     );
   }
 }
+
+// ── Feed / RSS toggle ──────────────────────────────────────────────────────────
+
+class _FeedRssTabBar extends ConsumerWidget {
+  const _FeedRssTabBar();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final feedTab = ref.watch(selectedFeedTabProvider);
+    final color = Theme.of(context).colorScheme.primary;
+
+    return SizedBox(
+      height: 48,
+      child: Row(
+        children: [
+          const SizedBox(width: 12),
+          _FeedTabChip(
+            label: 'Feed',
+            icon: Icons.star_outline,
+            selected: feedTab == 'feed',
+            color: color,
+            onTap: () {
+              ref.read(selectedFeedTabProvider.notifier).state = 'feed';
+              ref.read(showStarredProvider.notifier).state = false;
+            },
+          ),
+          const SizedBox(width: 8),
+          _FeedTabChip(
+            label: 'RSS',
+            icon: Icons.rss_feed,
+            selected: feedTab == 'rss',
+            color: color,
+            onTap: () {
+              ref.read(selectedFeedTabProvider.notifier).state = 'rss';
+              ref.read(showStarredProvider.notifier).state = false;
+              ref.read(selectedCategoryProvider.notifier).state = null;
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FeedTabChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _FeedTabChip({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? color : Colors.grey[100],
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon,
+                size: 15,
+                color: selected ? Colors.white : Colors.grey[600]),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: TextStyle(
+                color: selected ? Colors.white : Colors.grey[700],
+                fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Categorie-tabbar (alleen zichtbaar in feed-tab) ───────────────────────────
 
 class _CategoryTabBar extends ConsumerWidget {
   const _CategoryTabBar();

@@ -3,12 +3,14 @@ package com.vdzon.newsfeedbackend.service
 import com.vdzon.newsfeedbackend.model.CategoryResult
 import com.vdzon.newsfeedbackend.model.NewsRequest
 import com.vdzon.newsfeedbackend.model.RequestStatus
+import com.vdzon.newsfeedbackend.model.RssItem
 import com.vdzon.newsfeedbackend.websocket.RequestWebSocketHandler
 import org.slf4j.LoggerFactory
 import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Service
 import java.time.Instant
 import java.util.Collections
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 @Service
@@ -16,7 +18,8 @@ class RequestProcessor(
     private val storageService: StorageService,
     private val realNewsSourceService: RealNewsSourceService,
     private val settingsService: SettingsService,
-    private val newsService: NewsService,
+    private val rssItemService: RssItemService,
+    private val rssProcessingService: RssProcessingService,
     private val webSocketHandler: RequestWebSocketHandler
 ) {
     // Set met request-IDs die gecanceld zijn; wordt gecheckt in de processing loops
@@ -29,8 +32,8 @@ class RequestProcessor(
     private fun isCancelled(id: String) = cancelledIds.contains(id)
 
     private fun loadFeedback(username: String): FeedbackContext {
-        val liked = newsService.getLikedItems(username).map { it.title }
-        val disliked = newsService.getDislikedItems(username).map { it.title }
+        val liked = rssItemService.getLikedItems(username).map { it.title }
+        val disliked = rssItemService.getDislikedItems(username).map { it.title }
         if (liked.isNotEmpty() || disliked.isNotEmpty()) {
             log.info("Feedback context: {} geliked, {} gedisliked", liked.size, disliked.size)
         }
@@ -46,7 +49,9 @@ class RequestProcessor(
             val categories = settingsService.getSettings(username)
             val rssUrls = storageService.loadRssFeeds(username).feeds
             val feedback = loadFeedback(username)
-            val existingUrls = newsService.getAll(username).map { it.url }.toSet()
+            val existingUrls = rssItemService.getAll(username).map { it.url }.toSet()
+            val nowStr = Instant.now().toString()
+            var addedCount = 0
             val (articles, costUsd) = realNewsSourceService.fetchArticlesForSubject(
                 subject = request.subject,
                 preferredCount = request.preferredCount,
@@ -58,8 +63,26 @@ class RequestProcessor(
                 existingUrls = existingUrls,
                 onArticle = { item ->
                     if (!isCancelled(request.id)) {
-                        newsService.addItems(username, listOf(item))
-                        log.info("Artikel direct toegevoegd: '{}'", item.title.take(50))
+                        // Converteer NewsItem → RssItem en sla op met inFeed=true (expliciet gevraagd)
+                        val rssItem = RssItem(
+                            id = item.id,
+                            title = item.title,
+                            summary = item.summary,
+                            url = item.url,
+                            category = item.category,
+                            feedUrl = item.feedUrl ?: "",
+                            source = item.source,
+                            snippet = "",
+                            publishedDate = item.publishedDate,
+                            timestamp = nowStr,
+                            processedAt = nowStr,
+                            inFeed = true,
+                            feedReason = "Gevraagd via verzoek: ${request.subject}",
+                            topics = item.topics
+                        )
+                        rssItemService.addItems(username, listOf(rssItem))
+                        addedCount++
+                        log.info("Verzoek-artikel direct toegevoegd: '{}'", item.title.take(50))
                     }
                 }
             )
@@ -90,33 +113,18 @@ class RequestProcessor(
         if (isCancelled(requestId)) return
         updateStatus(username, requestId, RequestStatus.PROCESSING)
         try {
-            val categories = settingsService.getSettings(username)
-            val rssUrls = storageService.loadRssFeeds(username).feeds
-            val feedback = loadFeedback(username)
-            val existingUrls = newsService.getAll(username).map { it.url }.toSet()
-            val fetchResult = realNewsSourceService.fetchDailyNews(
-                categories = categories,
-                rssUrls = rssUrls,
-                feedback = feedback,
-                existingUrls = existingUrls,
-                onArticle = { item ->
-                    if (!isCancelled(requestId)) {
-                        newsService.addItems(username, listOf(item))
-                        log.info("Dagelijks artikel direct toegevoegd: '{}'", item.title.take(50))
-                    }
-                }
-            )
+            val newCount = rssProcessingService.processUser(username)
             if (isCancelled(requestId)) {
                 log.info("Daily Update geannuleerd voor {}", username)
                 cancelledIds.remove(requestId)
                 return
             }
-            if (fetchResult.items.isNotEmpty()) {
-                log.info("Daily Update afgerond voor {}: {} artikelen, kosten \${}", username, fetchResult.items.size, "%.4f".format(fetchResult.totalCostUsd))
+            if (newCount > 0) {
+                log.info("Daily Update afgerond voor {}: {} nieuwe items", username, newCount)
             } else {
-                log.warn("Daily Update afgerond voor {}: geen artikelen gevonden", username)
+                log.info("Daily Update afgerond voor {}: geen nieuwe items", username)
             }
-            updateStatusDailyUpdate(username, requestId, RequestStatus.DONE, fetchResult.items.size, fetchResult.totalCostUsd, fetchResult.categoryResults)
+            updateStatusDailyUpdate(username, requestId, RequestStatus.DONE, newCount, 0.0, emptyList())
         } catch (e: Exception) {
             if (isCancelled(requestId)) {
                 log.info("Daily Update geannuleerd voor {}", username)

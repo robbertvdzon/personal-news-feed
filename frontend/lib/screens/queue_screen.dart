@@ -81,8 +81,6 @@ class QueueScreen extends ConsumerWidget {
         }) {
           ref.read(requestProvider.notifier).addRequest(
                 subject: subject,
-                preferredCount: preferredCount,
-                maxCount: maxCount,
                 extraInstructions: extraInstructions,
                 maxAgeDays: maxAgeDays,
               );
@@ -539,14 +537,6 @@ class _RequestTile extends ConsumerWidget {
                       ),
                     ),
                   ],
-                  const SizedBox(width: 8),
-                  Text(
-                    '${request.preferredCount}–${request.maxCount} art.',
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(color: Colors.grey[400]),
-                  ),
                 ],
               ),
             ],
@@ -578,13 +568,6 @@ class _RequestTile extends ConsumerWidget {
               Text(request.extraInstructions, style: const TextStyle(fontSize: 13)),
               const SizedBox(height: 12),
             ],
-            Row(children: [
-              const Icon(Icons.tune, size: 14, color: Colors.grey),
-              const SizedBox(width: 4),
-              Text('${request.preferredCount}–${request.maxCount} artikelen',
-                  style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-            ]),
-            const SizedBox(height: 4),
             Row(children: [
               const Icon(Icons.schedule, size: 14, color: Colors.grey),
               const SizedBox(width: 4),
@@ -803,8 +786,6 @@ class _AddRequestDialogState extends State<_AddRequestDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _subjectController;
   late final TextEditingController _extraController;
-  late int _preferredCount;
-  late int _maxCount;
   late int _maxAgeDays;
 
   static const _ageOptions = [
@@ -819,8 +800,6 @@ class _AddRequestDialogState extends State<_AddRequestDialog> {
     super.initState();
     _subjectController = TextEditingController(text: widget.prefill?.subject ?? '');
     _extraController = TextEditingController(text: widget.prefill?.extraInstructions ?? '');
-    _preferredCount = widget.prefill?.preferredCount ?? 3;
-    _maxCount = widget.prefill?.maxCount ?? 5;
     _maxAgeDays = widget.prefill?.maxAgeDays ?? 3;
   }
 
@@ -835,8 +814,8 @@ class _AddRequestDialogState extends State<_AddRequestDialog> {
     if (_formKey.currentState?.validate() ?? false) {
       widget.onSubmit(
         subject: _subjectController.text.trim(),
-        preferredCount: _preferredCount,
-        maxCount: _maxCount,
+        preferredCount: 3,
+        maxCount: 5,
         extraInstructions: _extraController.text.trim(),
         maxAgeDays: _maxAgeDays,
       );
@@ -893,52 +872,6 @@ class _AddRequestDialogState extends State<_AddRequestDialog> {
                     onSelected: (_) => setState(() => _maxAgeDays = opt.days),
                   );
                 }).toList(),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Voorkeur: $_preferredCount',
-                            style: Theme.of(context).textTheme.bodySmall),
-                        Slider(
-                          value: _preferredCount.toDouble(),
-                          min: 1,
-                          max: 10,
-                          divisions: 9,
-                          label: '$_preferredCount',
-                          onChanged: (v) => setState(() {
-                            _preferredCount = v.round();
-                            if (_maxCount < _preferredCount) _maxCount = _preferredCount;
-                          }),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Maximum: $_maxCount',
-                            style: Theme.of(context).textTheme.bodySmall),
-                        Slider(
-                          value: _maxCount.toDouble(),
-                          min: 1,
-                          max: 20,
-                          divisions: 19,
-                          label: '$_maxCount',
-                          onChanged: (v) => setState(() {
-                            _maxCount = v.round();
-                            if (_preferredCount > _maxCount) _preferredCount = _maxCount;
-                          }),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
               ),
             ],
           ),

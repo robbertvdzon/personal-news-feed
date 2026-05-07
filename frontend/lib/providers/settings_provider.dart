@@ -31,22 +31,13 @@ class SettingsNotifier extends AsyncNotifier<List<Category>> {
               if (cat.id == categoryId) cat.copyWith(name: name) else cat,
           ]);
 
-  Future<void> updateCounts(String categoryId, int preferredCount, int maxCount) =>
-      _mutate((cats) => [
-            for (final cat in cats)
-              if (cat.id == categoryId)
-                cat.copyWith(preferredCount: preferredCount, maxCount: maxCount)
-              else
-                cat,
-          ]);
-
   Future<void> addCategory(String name) {
     final id = name.toLowerCase().replaceAll(RegExp(r'\s+'), '_');
     final cats = state.valueOrNull ?? [];
     if (cats.any((c) => c.id == id)) return Future.value();
     return _mutate((current) => [
           ...current,
-          Category(id: id, name: name, enabled: true, preferredCount: 3, maxCount: 5),
+          Category(id: id, name: name, enabled: true),
         ]);
   }
 

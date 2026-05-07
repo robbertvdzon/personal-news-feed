@@ -3,6 +3,7 @@ package com.vdzon.newsfeedbackend.service
 import com.vdzon.newsfeedbackend.model.Podcast
 import com.vdzon.newsfeedbackend.model.PodcastStatus
 import com.vdzon.newsfeedbackend.model.TtsProvider
+import com.vdzon.newsfeedbackend.model.RssItem
 import org.slf4j.LoggerFactory
 import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Service
@@ -15,7 +16,7 @@ import java.time.ZonedDateTime
 @Service
 class PodcastProcessor(
     private val storageService: StorageService,
-    private val newsService: NewsService,
+    private val rssItemService: RssItemService,
     private val rssFetchService: RssFetchService,
     private val settingsService: SettingsService,
     private val anthropicService: AnthropicService,
@@ -72,9 +73,9 @@ class PodcastProcessor(
             log.info("Podcast RSS: {} artikelen na filter ({} dagen) voor {}", rssArticles.size, podcast.periodDays, username)
 
             // Gebruikersfeedback en categorieën voor betere onderwerpkeuze
-            val likedTitles   = newsService.getLikedItems(username).map { it.title }
-            val dislikedTitles = newsService.getDislikedItems(username).map { it.title }
-            val starredTitles  = newsService.getAll(username).filter { it.starred }.map { it.title }
+            val likedTitles    = rssItemService.getLikedItems(username).map { it.title }
+            val dislikedTitles = rssItemService.getDislikedItems(username).map { it.title }
+            val starredTitles  = rssItemService.getStarredItems(username).map { it.title }
             val categories     = settingsService.getSettings(username)
             val categoryInterests = categories.filter { it.enabled && !it.isSystem }.map { it.name }
             val topicHistoryContext = topicHistoryService.buildPodcastContext(username)

@@ -1,6 +1,5 @@
 package com.vdzon.newsfeedbackend.service
 
-import com.vdzon.newsfeedbackend.model.CategoryResult
 import com.vdzon.newsfeedbackend.model.CategorySettings
 import com.vdzon.newsfeedbackend.model.NewsItem
 import org.slf4j.LoggerFactory
@@ -9,20 +8,12 @@ import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 
-data class DailyFetchResult(
-    val items: List<NewsItem>,
-    val categoryResults: List<CategoryResult>,
-    val totalCostUsd: Double
-)
-
 data class FeedbackContext(
     val likedTitles: List<String> = emptyList(),
     val dislikedTitles: List<String> = emptyList(),
     /** Geformatteerde topic-geschiedenis voor de selectie-prompt */
     val topicHistoryContext: String = ""
 )
-
-private val SYSTEM_CATEGORY_IDS = setOf("overig")
 
 @Service
 class RealNewsSourceService(
@@ -31,91 +22,6 @@ class RealNewsSourceService(
     private val rssFetchService: RssFetchService
 ) {
     private val log = LoggerFactory.getLogger(RealNewsSourceService::class.java)
-
-    fun fetchDailyNews(
-        categories: List<CategorySettings>,
-        rssUrls: List<String> = emptyList(),
-        feedback: FeedbackContext = FeedbackContext(),
-        existingUrls: Set<String> = emptySet(),
-        onArticle: (NewsItem) -> Unit = {}
-    ): DailyFetchResult {
-        log.info("Fetch daily news, START")
-
-        val allItems = mutableListOf<NewsItem>()
-        val categoryResults = mutableListOf<CategoryResult>()
-        var totalCost = 0.0
-
-        val enabledCategories = categories.filter { it.enabled && !it.isSystem && it.id !in SYSTEM_CATEGORY_IDS }
-
-        // Fetch all RSS articles once
-        val allRssArticles = rssFetchService.fetchAll(rssUrls)
-        log.info("RSS totaal: {} artikelen van {} feeds", allRssArticles.size, rssUrls.size)
-
-        // Apply date filter (1 day)
-        val filtered = filterByDate(allRssArticles, 1)
-        log.info("RSS na datum-filter (1 dag): {} artikelen", filtered.size)
-
-        // Track seen URLs: start met al bestaande URLs zodat duplicaten worden overgeslagen
-        val seenUrls = existingUrls.toMutableSet()
-        log.info("Deduplicatie: {} al bestaande URLs uitgesloten", existingUrls.size)
-
-        // Process each enabled non-system category
-        enabledCategories.forEach { cat ->
-            log.info("Process categorie '{}'", cat.name)
-            val available = filtered.filter { it.url !in seenUrls }
-            log.info("Categorie '{}': {} beschikbaar na deduplicatie", cat.name, available.size)
-
-            if (available.isEmpty()) {
-                log.warn("Geen artikelen beschikbaar voor categorie '{}'", cat.name)
-                return@forEach
-            }
-
-            log.info("Select articles for categorie '{}'", cat.name)
-            val (items, cost) = selectExtractAndSummarize(
-                articles = available,
-                subject = cat.name,
-                extraInstructions = cat.extraInstructions,
-                preferredCount = cat.preferredCount,
-                maxCount = cat.maxCount,
-                categoryId = cat.id,
-                feedback = feedback,
-                onArticle = onArticle
-            )
-            log.info("{} articles are seclted for categorie '{}'",items.size,  cat.name)
-
-            items.forEach { seenUrls.add(it.url) }
-            allItems.addAll(items)
-            totalCost += cost
-            categoryResults.add(CategoryResult(
-                categoryId = cat.id,
-                categoryName = cat.name,
-                articleCount = items.size,
-                costUsd = cost,
-                searchResultCount = filtered.size,
-                filteredCount = available.size
-            ))
-            log.info("Categorie '{}': {} toegevoegd, kosten \${}",
-                cat.name, items.size, "%.5f".format(cost))
-        }
-
-        // Dagelijks overzicht
-        if (allItems.isNotEmpty()) {
-            val categoryNames = enabledCategories.map { it.name }
-            try {
-                log.info("Dagelijks overzicht genereren op basis van {} artikelen", allItems.size)
-                val (summaryItem, summaryCost) = anthropicService.generateDailySummary(allItems, categoryNames)
-                allItems.add(0, summaryItem)
-                onArticle(summaryItem)
-                totalCost += summaryCost
-                log.info("Dagelijks overzicht klaar, kosten \${}", "%.5f".format(summaryCost))
-            } catch (e: Exception) {
-                log.error("Dagelijks overzicht mislukt: {}", e.message)
-            }
-        }
-        log.info("Fetch daily news, Finished")
-
-        return DailyFetchResult(allItems, categoryResults, totalCost)
-    }
 
     fun fetchArticlesForSubject(
         subject: String,
