@@ -29,9 +29,16 @@ class RssItemService(
     fun addItems(username: String, items: List<RssItem>) {
         if (items.isEmpty()) return
         val current = storageService.loadRssItems(username).toMutableList()
-        current.addAll(0, items)
+        val existingUrls = current.map { it.url }.toSet()
+        val deduped = items.filter { it.url !in existingUrls }
+        if (deduped.isEmpty()) {
+            log.info("Alle {} RSS-item(s) bestonden al voor {}, niets toegevoegd", items.size, username)
+            return
+        }
+        current.addAll(0, deduped)
         storageService.saveRssItems(username, current)
-        log.info("{} nieuw(e) RSS-item(s) toegevoegd voor {}", items.size, username)
+        log.info("{} nieuw(e) RSS-item(s) toegevoegd voor {} ({} duplicaten overgeslagen)",
+            deduped.size, username, items.size - deduped.size)
     }
 
     fun updateItems(username: String, updates: List<RssItem>) {

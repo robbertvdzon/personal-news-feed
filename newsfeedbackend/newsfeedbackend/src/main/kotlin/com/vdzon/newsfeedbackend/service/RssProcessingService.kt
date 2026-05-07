@@ -6,6 +6,8 @@ import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 
 @Service
 class RssProcessingService(
@@ -17,6 +19,7 @@ class RssProcessingService(
     private val topicHistoryService: TopicHistoryService
 ) {
     private val log = LoggerFactory.getLogger(RssProcessingService::class.java)
+    private val runningUsers = ConcurrentHashMap<String, AtomicBoolean>()
 
     /** Verwerkt elk uur automatisch alle RSS-feeds voor alle gebruikers. */
     @Scheduled(fixedDelay = 3_600_000, initialDelay = 60_000)
@@ -44,6 +47,19 @@ class RssProcessingService(
      * Geeft het aantal nieuw verwerkte items terug.
      */
     fun processUser(username: String): Int {
+        val lock = runningUsers.computeIfAbsent(username) { AtomicBoolean(false) }
+        if (!lock.compareAndSet(false, true)) {
+            log.info("RSS-verwerking voor {} al bezig, overgeslagen", username)
+            return 0
+        }
+        try {
+            return doProcessUser(username)
+        } finally {
+            lock.set(false)
+        }
+    }
+
+    private fun doProcessUser(username: String): Int {
         log.info("RSS-verwerking gestart voor {}", username)
         val rssUrls = storageService.loadRssFeeds(username).feeds
         if (rssUrls.isEmpty()) {
@@ -78,12 +94,15 @@ class RssProcessingService(
             try {
                 val (summary, cost) = anthropicService.summarizeRssItem(raw, enabledCategories)
                 totalCost += cost
+                val categoryId = enabledCategories
+                    .find { it.name.equals(summary.category, ignoreCase = true) }
+                    ?.id ?: summary.category.lowercase().replace(" ", "_")
                 val item = RssItem(
                     id = UUID.randomUUID().toString(),
                     title = summary.title,
                     summary = summary.summary,
                     url = raw.url,
-                    category = summary.category,
+                    category = categoryId,
                     feedUrl = raw.feedUrl ?: "",
                     source = raw.source,
                     snippet = raw.snippet,
