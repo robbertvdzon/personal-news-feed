@@ -1,6 +1,6 @@
-# Personal News Feed — Backend Specificatie
+# Personal News Feed — Backend Functionele Specificatie
 
-> **Doel van dit document:** Een volledige black-box beschrijving van de backend, zodat een AI-model de backend volledig opnieuw kan bouwen zonder de originele broncode te zien. Geen implementatiedetails, wel volledig gedrag.
+> **Doel van dit document:** Een volledige black-box beschrijving van het gedrag van de backend — wat de app doet, niet hoe het gebouwd is. Voor architectuur, patterns, monitoring en testing: zie [`backend-technical-spec.md`](./backend-technical-spec.md).
 
 ---
 
@@ -14,21 +14,11 @@ De backend is een **persoonlijke nieuwsfeed-service** die:
 - Podcasts genereert (script + audio) op basis van recente nieuwsartikelen
 - Multi-user: elke gebruiker heeft volledig eigen data en instellingen
 
-**Stack:** REST API + WebSocket, JSON opslag op schijf (geen database), JWT authenticatie, asynchrone achtergrondverwerking.
-
-**Taal/platform:** Spring Boot **4.x**, Kotlin **2.x**, poort 8080.
-
-**Build tool:** Maven (`pom.xml`).
-
-**Belangrijke dependency-details:**
-- Jackson 3.x via groupId `tools.jackson` (niet `com.fasterxml.jackson` — Spring Boot 4 gebruikt een andere groupId)
-- JWT: `io.jsonwebtoken:jjwt-api` / `jjwt-impl` / `jjwt-jackson` (JJWT bibliotheek)
-- RSS parsing: Rome bibliotheek (`com.rometools:rome`)
-- Spring WebSocket (niet WebFlux): `spring-boot-starter-websocket`
+**Stack:** REST API + WebSocket, JSON opslag op schijf (geen database), JWT authenticatie, asynchrone achtergrondverwerking. Voor de technische invulling hiervan: zie [`backend-technical-spec.md`](./backend-technical-spec.md).
 
 ---
 
-## 2. Architectuur & Dataopslag
+## 2. Dataopslag
 
 ### Persistentie
 Alle data wordt opgeslagen als JSON-bestanden op het lokale bestandssysteem. Er is geen externe database. De rootmap is configureerbaar via `app.data-dir` (standaard `./data`).
@@ -72,7 +62,15 @@ data/
 
 ## 4. Data Modellen
 
+De volledige datamodellen voor de REST API (velden, types, validaties) staan gedefinieerd in **[`openapi.yaml`](./openapi.yaml)** onder `components/schemas`. Dit zijn: `RssItem`, `FeedItem`, `NewsRequest`, `CategoryResult`, `Podcast`, `CategorySettings`, `RssFeedsSettings` en alle bijbehorende enums.
+
+Hieronder staan alleen de **interne modellen** die niet via de API worden blootgesteld.
+
+---
+
 ### User
+Wordt nooit via de API teruggegeven; `passwordHash` blijft altijd server-side.
+
 | Veld | Type | Beschrijving |
 |---|---|---|
 | `id` | String (UUID) | Uniek ID |
@@ -81,157 +79,8 @@ data/
 
 ---
 
-### CategorySettings
-| Veld | Type | Beschrijving |
-|---|---|---|
-| `id` | String | Categorie-ID (bijv. `kotlin`, `flutter`) |
-| `name` | String | Weergavenaam |
-| `enabled` | Boolean | Of de categorie actief is (default: true) |
-| `extraInstructions` | String | Extra AI-instructies voor deze categorie (default: "") |
-| `isSystem` | Boolean | Systeemcategorie, niet verwijderbaar (default: false) |
-
-**Standaard categorieën** (aangemaakt als ze ontbreken):
-- `kotlin` — Kotlin
-- `flutter` — Flutter
-- `ai` — Artificiële Intelligentie
-- `blockchain` — Blockchain (standaard uitgeschakeld)
-- `spring` — Spring Framework
-- `web_dev` — Web Development
-- `overig` — Overig (systeemcategorie, vangnet)
-
----
-
-### RssFeedsSettings
-| Veld | Type | Beschrijving |
-|---|---|---|
-| `feeds` | List\<String\> | Lijst van RSS-feed URLs |
-
----
-
-### RssItem
-Ruwe RSS-artikel na ophalen en AI-verwerking.
-
-| Veld | Type | Beschrijving |
-|---|---|---|
-| `id` | String (UUID) | Uniek ID |
-| `title` | String | Artikeltitel |
-| `summary` | String | AI-gegenereerde samenvatting (150-250 woorden, Nederlands) |
-| `url` | String | Artikel-URL |
-| `category` | String | Toegewezen categorie-ID |
-| `feedUrl` | String | URL van de RSS-feed waaruit dit item komt |
-| `source` | String | Naam van de bron |
-| `snippet` | String | Ruwe RSS-tekst, max 1000 tekens (HTML gestript) |
-| `publishedDate` | String? | Publicatiedatum in ISO-formaat `YYYY-MM-DD` (nullable) |
-| `timestamp` | String | ISO-8601 tijdstip van opslaan |
-| `processedAt` | String? | ISO-8601 tijdstip van AI-verwerking (nullable) |
-| `inFeed` | Boolean | Of AI dit item geselecteerd heeft voor de persoonlijke feed |
-| `feedReason` | String | AI-uitleg waarom dit item wel/niet in de feed staat |
-| `isRead` | Boolean | Gelezen door gebruiker |
-| `starred` | Boolean | Bewaard door gebruiker |
-| `liked` | Boolean? | Feedback: true=leuk, false=niet relevant, null=geen feedback |
-| `topics` | List\<String\> | 2-3 canonieke onderwerpen (Nederlands, door AI bepaald) |
-| `feedItemId` | String? | Gekoppeld FeedItem ID (als `inFeed=true`) |
-
----
-
-### FeedItem
-Gecureerd, rijk artikel voor de persoonlijke feed.
-
-| Veld | Type | Beschrijving |
-|---|---|---|
-| `id` | String | Uniek ID |
-| `title` | String | Artikeltitel |
-| `summary` | String | Uitgebreide AI-samenvatting (400-600 woorden, Nederlands) |
-| `url` | String | Artikel-URL |
-| `category` | String | Categorie-ID |
-| `source` | String | Naam van de bron |
-| `sourceRssIds` | List\<String\> | IDs van gekoppelde RssItems |
-| `sourceUrls` | List\<String\> | Externe bron-URLs |
-| `topics` | List\<String\> | Onderwerpen |
-| `feedReason` | String | Uitleg voor opname in feed |
-| `isRead` | Boolean | Gelezen door gebruiker |
-| `starred` | Boolean | Bewaard door gebruiker |
-| `liked` | Boolean? | Feedback van gebruiker |
-| `createdAt` | String | ISO-8601 aanmaaktijdstip |
-| `publishedDate` | String? | Publicatiedatum `YYYY-MM-DD` (nullable) |
-| `isSummary` | Boolean | `true` als dit de dagelijkse AI-samenvatting is (default: false) |
-
----
-
-### NewsRequest
-Een verwerkingsverzoek (ad-hoc of automatisch dagelijkse update).
-
-| Veld | Type | Beschrijving |
-|---|---|---|
-| `id` | String | Uniek ID |
-| `subject` | String | Onderwerp van het verzoek |
-| `sourceItemId` | String? | ID van het bronartikel (bij "meer hierover") |
-| `sourceItemTitle` | String? | Titel van het bronartikel |
-| `preferredCount` | Int | Gewenst aantal resultaten (default: 2) |
-| `maxCount` | Int | Maximum aantal resultaten (default: 5) |
-| `extraInstructions` | String | Extra instructies voor AI |
-| `maxAgeDays` | Int | Maximum leeftijd artikelen in dagen (default: 3) |
-| `status` | RequestStatus | `PENDING` \| `PROCESSING` \| `DONE` \| `FAILED` \| `CANCELLED` |
-| `createdAt` | String | ISO-8601 aanmaaktijdstip |
-| `completedAt` | String? | ISO-8601 voltooiingstijdstip |
-| `newItemCount` | Int | Aantal nieuw gevonden items |
-| `costUsd` | Double | Geschatte AI-kosten in USD |
-| `isDailyUpdate` | Boolean | Of dit een automatische dagelijkse update is |
-| `isDailySummary` | Boolean | Of dit een dagelijkse samenvatting is |
-| `summaryText` | String | (Deprecated) samenvatting tekst |
-| `categoryResults` | List\<CategoryResult\> | Per-categorie statistieken |
-| `processingStartedAt` | String? | ISO-8601 starttijdstip verwerking |
-| `durationSeconds` | Int | Verwerkingsduur in seconden |
-
-**RequestStatus waarden:**
-- `PENDING` — Wacht op verwerking
-- `PROCESSING` — Wordt verwerkt
-- `DONE` — Succesvol afgerond
-- `FAILED` — Mislukt
-- `CANCELLED` — Geannuleerd door gebruiker
-
----
-
-### CategoryResult
-Per-categorie statistieken binnen een NewsRequest.
-
-| Veld | Type | Beschrijving |
-|---|---|---|
-| `categoryId` | String | Categorie-ID |
-| `categoryName` | String | Categorienaam |
-| `articleCount` | Int | Aantal gevonden artikelen |
-| `costUsd` | Double | AI-kosten voor deze categorie |
-| `searchResultCount` | Int | Aantal zoekresultaten |
-| `filteredCount` | Int | Aantal na filtering |
-
----
-
-### Podcast
-| Veld | Type | Beschrijving |
-|---|---|---|
-| `id` | String | Uniek ID |
-| `title` | String | Podcasttitel (bijv. "DevTalk 12, 2025-05-07 — Kotlin, Flutter") |
-| `periodDescription` | String | Periode omschrijving (bijv. "afgelopen week") |
-| `periodDays` | Int | Periode in dagen voor nieuwsselectie |
-| `durationMinutes` | Int | Gewenste duur in minuten |
-| `status` | PodcastStatus | Status (zie onder) |
-| `createdAt` | String | ISO-8601 aanmaaktijdstip |
-| `scriptText` | String? | Volledig podcastscript (alleen in detail-endpoint) |
-| `topics` | List\<String\> | Besproken onderwerpen |
-| `audioPath` | String? | Pad naar MP3-bestand op server |
-| `durationSeconds` | Int? | Werkelijke duur van de audio |
-| `costUsd` | Double | Geschatte totale kosten |
-| `customTopics` | List\<String\> | Door gebruiker opgegeven onderwerpen (optioneel) |
-| `ttsProvider` | TtsProvider | `OPENAI` \| `ELEVENLABS` |
-| `podcastNumber` | Int | Oplopend volgnummer per gebruiker |
-| `generationSeconds` | Int? | Generatieduur in seconden |
-
-**PodcastStatus waarden:** `PENDING` → `DETERMINING_TOPICS` → `GENERATING_SCRIPT` → `GENERATING_AUDIO` → `DONE` / `FAILED`
-
----
-
 ### TopicEntry
-Onderwerp-geschiedenis per gebruiker (intern, niet direct via API).
+Onderwerp-geschiedenis per gebruiker. Wordt intern bijgehouden en als context meegegeven aan Claude; nooit direct via de API beschikbaar.
 
 | Veld | Type | Beschrijving |
 |---|---|---|
@@ -244,6 +93,11 @@ Onderwerp-geschiedenis per gebruiker (intern, niet direct via API).
 | `podcastDeepCount` | Int | Aantal keer diepgaand behandeld in podcast |
 | `likedCount` | Int | Aantal keer geliket door gebruiker |
 | `starredCount` | Int | Aantal keer bewaard door gebruiker |
+
+---
+
+### Systeemcategorie "overig"
+De categorie `overig` is een speciale vangnetcategorie: als Claude een artikel niet in een van de gebruikerscategorieën kan plaatsen, krijgt het automatisch categorie `overig`. Deze categorie heeft `isSystem: true` en kan niet verwijderd worden.
 
 ---
 
@@ -354,9 +208,9 @@ Deze geschiedenis wordt als context meegegeven aan Claude bij:
 
 ---
 
-## 8. Externe Systemen
+## 7. Externe Systemen
 
-### 8.1 Anthropic Claude (AI backbone)
+### 7.1 Anthropic Claude (AI backbone)
 
 **API:** `https://api.anthropic.com/v1/messages`
 
@@ -386,7 +240,7 @@ Deze geschiedenis wordt als context meegegeven aan Claude bij:
 
 ---
 
-### 8.2 Tavily (webzoekopdrachten & extractie)
+### 7.2 Tavily (webzoekopdrachten & extractie)
 
 **API:** `https://api.tavily.com`
 
@@ -403,7 +257,7 @@ Tavily wordt **alleen** gebruikt voor ad-hoc verzoeken (`POST /api/requests`), n
 
 ---
 
-### 8.3 OpenAI TTS (tekst-naar-spraak voor podcasts)
+### 7.3 OpenAI TTS (tekst-naar-spraak voor podcasts)
 
 **API:** `https://api.openai.com/v1/audio/speech`
 
@@ -421,7 +275,7 @@ Tavily wordt **alleen** gebruikt voor ad-hoc verzoeken (`POST /api/requests`), n
 
 ---
 
-### 8.4 ElevenLabs TTS (alternatieve tekst-naar-spraak)
+### 7.4 ElevenLabs TTS (alternatieve tekst-naar-spraak)
 
 **API:** `https://api.elevenlabs.io/v1/text-to-speech/{voiceId}`
 
@@ -438,7 +292,7 @@ Tavily wordt **alleen** gebruikt voor ad-hoc verzoeken (`POST /api/requests`), n
 
 ---
 
-### 8.5 RSS-feeds (nieuwsbronnen)
+### 7.5 RSS-feeds (nieuwsbronnen)
 
 Gewone HTTP GET-requests naar door de gebruiker geconfigureerde RSS-feed URLs.
 
@@ -452,7 +306,7 @@ Gewone HTTP GET-requests naar door de gebruiker geconfigureerde RSS-feed URLs.
 
 ---
 
-## 9. Configuratie
+## 8. Configuratie
 
 Alle configuratie via `application.properties` of omgevingsvariabelen.
 
@@ -475,7 +329,7 @@ Alle configuratie via `application.properties` of omgevingsvariabelen.
 
 ---
 
-## 10. Geplande taken
+## 9. Geplande taken
 
 | Tijd | Taak |
 |---|---|
@@ -484,7 +338,7 @@ Alle configuratie via `application.properties` of omgevingsvariabelen.
 
 ---
 
-## 11. Foutafhandeling & Grenzen
+## 10. Foutafhandeling & Grenzen
 
 - **RSS-verwerking:** Als Claude-aanroep mislukt voor één artikel, wordt dat artikel overgeslagen; verwerking gaat door.
 - **Podcast:** Bij een fout in een van de stappen wordt de podcast gemarkeerd als `FAILED`.

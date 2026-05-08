@@ -39,7 +39,8 @@ personal-news-feed/
 
 | Bestand | Inhoud |
 |---------|--------|
-| [`backend-spec.md`](./backend-spec.md) | Architectuur, datamodellen, achtergrondprocessen, externe systemen (Anthropic, Tavily, OpenAI TTS, ElevenLabs), configuratie, foutafhandeling |
+| [`backend-functional-spec.md`](./backend-functional-spec.md) | Wat de backend doet: datamodellen, achtergrondprocessen (pipelines), externe systemen, configuratie, foutafhandeling |
+| [`backend-technical-spec.md`](./backend-technical-spec.md) | Hoe de backend gebouwd is: Spring Modulith modules, gelaagde architectuur, DTOs, logging, Grafana-monitoring, Cucumber integratie-tests, IntelliJ setup |
 | [`frontend-spec.md`](./frontend-spec.md) | Alle schermen, navigatie, gebruikersacties, state management, WebSocket-integratie, audio-afspelen |
 | [`openapi.yaml`](./openapi.yaml) | Alle REST-endpoints met paden, methoden, parameters, request/response-bodies en dataschema's. Dit is de **source of truth** voor de API-interface tussen backend en frontend. |
 
