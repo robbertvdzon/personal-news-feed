@@ -32,6 +32,7 @@ De frontend is een **Flutter-app** (mobile + web) voor het lezen van een persoon
 | `shared_preferences` | Persistente opslag (token, font-instelling, audio-positie) |
 | `just_audio` | Audio afspelen (podcast) |
 | `url_launcher` | Links openen in externe browser |
+| `flutter_markdown` | Markdown-tekst renderen (dagelijkse samenvattingen, feed-items) |
 
 ---
 
@@ -304,12 +305,7 @@ De app gebruikt Riverpod. Providers zijn globaal beschikbaar via `ProviderScope`
 ## 11. Overige Gedragsdetails
 
 ### Markdown-rendering (FeedItemDetailScreen)
-De samenvatting van feed-items en dagelijkse samenvattingen wordt als Markdown weergegeven. Minimaal ondersteunde opmaak:
-- `# ## ###` voor koppen
-- `- *` voor ongeordende lijsten
-- `**tekst**` voor vet
-- `*tekst*` en `_tekst_` voor cursief
-- `***tekst***` voor vet+cursief
+De samenvatting van feed-items en dagelijkse samenvattingen wordt als Markdown weergegeven via het `flutter_markdown` package. Minimaal ondersteunde opmaak: koppen (`#`, `##`, `###`), ongeordende lijsten, vet, cursief, vet+cursief.
 
 ### Lettergrootte
 De lettergrootte-instelling geldt app-breed via een `MediaQuery`-wrapper in de root. Detailschermen passen dit ook toe.

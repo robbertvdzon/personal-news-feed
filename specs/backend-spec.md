@@ -263,7 +263,7 @@ Daarin staan alle endpoints met paden, methoden, request/response bodies, query 
 
 ## 6. Gedrag & Achtergrondprocessen
 
-### 7.1 Dagelijkse RSS-verwerking (automatisch, elk uur)
+### 6.1 Dagelijkse RSS-verwerking (automatisch, elk uur)
 
 Wordt elk uur automatisch uitgevoerd voor elke gebruiker. Handmatig te triggeren via `POST /api/rss/refresh`.
 
@@ -283,7 +283,7 @@ Wordt elk uur automatisch uitgevoerd voor elke gebruiker. Handmatig te triggeren
 
 ---
 
-### 7.2 Dagelijkse samenvatting (automatisch, 06:00)
+### 6.2 Dagelijkse samenvatting (automatisch, 06:00)
 
 Elke dag om 06:00 wordt voor elke gebruiker een dagelijkse samenvatting aangemaakt.
 
@@ -294,7 +294,7 @@ Elke dag om 06:00 wordt voor elke gebruiker een dagelijkse samenvatting aangemaa
 
 ---
 
-### 7.3 Ad-hoc verzoek verwerking
+### 6.3 Ad-hoc verzoek verwerking
 
 Wordt asynchroon gestart bij `POST /api/requests`.
 
@@ -310,7 +310,7 @@ Wordt asynchroon gestart bij `POST /api/requests`.
 
 ---
 
-### 7.4 Podcast generatie
+### 6.4 Podcast generatie
 
 Wordt asynchroon gestart bij `POST /api/podcasts`.
 
@@ -332,7 +332,7 @@ Wordt asynchroon gestart bij `POST /api/podcasts`.
 
 ---
 
-### 7.5 Opstartgedrag
+### 6.5 Opstartgedrag
 
 Bij serverstart worden alle verzoeken met status `PENDING` of `PROCESSING` gereset naar `FAILED` (herstel na herstart).
 
@@ -340,7 +340,7 @@ Voor elke bestaande gebruiker worden de vaste verzoekrecords `daily-update-{user
 
 ---
 
-### 7.6 Onderwerp-geschiedenis
+### 6.6 Onderwerp-geschiedenis
 
 De onderwerp-geschiedenis (`topic_history.json`) wordt bijgehouden per gebruiker en bijgewerkt na:
 - Elke RSS-verwerking (topics van nieuwe items)
