@@ -181,7 +181,8 @@ Toont de lijst van verwerkingsverzoeken: `GET /api/requests`.
 ### WebSocket-integratie
 Verbinding met `ws(s)://{host}/ws/requests` zodra de verzoeken geladen zijn.
 
-- Inkomende JSON-berichten zijn volledige `NewsRequest`-objecten; het bijpassende item in de lijst wordt op ID vervangen
+- Inkomende berichten zijn JSON-objecten conform het `NewsRequest` schema uit `openapi.yaml` (zie ook de berichtspecificatie in `backend-functional-spec.md` sectie 5)
+- Het bijpassende item in de lijst wordt op `id` vervangen
 - Bij status DONE of CANCELLED: automatisch RSS-items en feed-items herladen (nieuwe artikelen kunnen zijn binnengekomen)
 - Bij onbekend ID: stille herlaad van de volledige verzoeklijst
 - Bij verbrekingsfout: automatisch herverbinden na 5 seconden

@@ -109,9 +109,31 @@ Daarin staan alle endpoints met paden, methoden, request/response bodies, query 
 
 **WebSocket:** `ws://{host}/ws/requests`
 - Geen authenticatie vereist
-- Alleen server → client (broadcast; client-berichten worden genegeerd)
-- Bij elke statuswijziging van een `NewsRequest` (PROCESSING, DONE, FAILED, CANCELLED) wordt het volledige object als JSON naar alle verbonden clients gestuurd
+- Alleen server → client (broadcast; berichten van de client worden genegeerd)
 - Kapotte verbindingen worden bij de volgende broadcast verwijderd
+
+**Trigger:** bij elke statuswijziging van een `NewsRequest` stuurt de server één bericht naar alle verbonden clients.
+
+**Berichtformaat:** een enkel JSON-object, identiek aan het `NewsRequest` schema uit `openapi.yaml`. Voorbeeld:
+```json
+{
+  "id": "daily-update-robbert",
+  "subject": "Dagelijkse update",
+  "status": "DONE",
+  "isDailyUpdate": true,
+  "isDailySummary": false,
+  "newItemCount": 7,
+  "costUsd": 0.012,
+  "durationSeconds": 43,
+  "createdAt": "2025-05-08T06:00:00Z",
+  "completedAt": "2025-05-08T06:00:43Z",
+  "categoryResults": [
+    { "categoryId": "kotlin", "categoryName": "Kotlin", "articleCount": 3, "costUsd": 0.004, "searchResultCount": 12, "filteredCount": 3 }
+  ]
+}
+```
+
+De ontvanger (frontend) matcht het bericht op `id` en vervangt het bestaande item in de lokale lijst.
 
 ---
 
