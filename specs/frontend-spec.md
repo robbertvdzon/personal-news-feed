@@ -8,7 +8,7 @@
 
 De frontend is een **Flutter-app** (mobile + web) voor het lezen van een persoonlijke AI-nieuwsfeed. De app communiceert met de backend via REST en WebSocket.
 
-**Platform:** Flutter (Dart), ondersteunt iOS, Android en web.
+**Platform:** Flutter (Dart SDK **^3.9**), ondersteunt iOS, Android en web.
 
 **API-contract:** Alle endpoints, request/response-structuren en datamodellen staan beschreven in **[`openapi.yaml`](./openapi.yaml)** (OpenAPI 3.1). De frontend gebruikt al deze endpoints.
 
