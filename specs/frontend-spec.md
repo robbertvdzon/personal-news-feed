@@ -325,5 +325,42 @@ De lettergrootte-instelling geldt app-breed via een `MediaQuery`-wrapper in de r
 
 | Waarde | Hoe configureren | Standaard |
 |--------|-----------------|-----------|
-| Backend URL | `--dart-define=API_BASE_URL=https://...` bij build | `https://pnf.vdzon.com` |
+| Backend URL | `--dart-define=API_BASE_URL=https://...` bij build/run | `https://pnf.vdzon.com` |
 | App-icoon | `flutter_launcher_icons` in `pubspec.yaml` | — |
+
+---
+
+## 13. Development & Build
+
+De frontend wordt aangestuurd via een `Makefile` in de `frontend/` map.
+
+### Lokaal draaien (web)
+
+```bash
+make serve-ext   # of: make run
+```
+
+- Start de Flutter web-app op **poort 3000**
+- Gebruikt backend op **`http://localhost:8080`**
+- Geschikt voor lokale ontwikkeling terwijl de backend lokaal draait
+
+Intern voert dit zoiets uit als:
+```bash
+flutter run -d web-server --web-port 3000 \
+  --dart-define=API_BASE_URL=http://localhost:8080
+```
+
+### APK bouwen (Android, productie)
+
+```bash
+make build-apk-ext
+```
+
+- Bouwt een release-APK
+- Gebruikt backend op **`http://217.120.100.76:19283`**
+
+Intern zoiets als:
+```bash
+flutter build apk --release \
+  --dart-define=API_BASE_URL=http://217.120.100.76:19283
+```

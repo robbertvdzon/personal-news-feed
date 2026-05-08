@@ -61,6 +61,13 @@ Spring Boot backend (newsfeedbackend/)
       └── ElevenLabs TTS API    (podcast audio, optioneel)
 ```
 
-**Backend:** Spring Boot 4.x, Kotlin 2.x, Maven, poort 8080. Geen database — alle data als JSON-bestanden op schijf.
+**Backend:** Spring Boot 4.x, Kotlin 2.x, Maven, poort **8080**. Geen database — alle data als JSON-bestanden op schijf.
 
 **Frontend:** Flutter (Dart SDK ^3.9), Riverpod voor state management, `just_audio` voor podcast-afspelen.
+
+### Veelgebruikte commando's (vanuit `frontend/`)
+
+| Commando | Wat het doet |
+|----------|-------------|
+| `make serve-ext` / `make run` | Start web-app op poort **3000**, backend op `http://localhost:8080` |
+| `make build-apk-ext` | Bouwt release-APK met backend `http://217.120.100.76:19283` |
