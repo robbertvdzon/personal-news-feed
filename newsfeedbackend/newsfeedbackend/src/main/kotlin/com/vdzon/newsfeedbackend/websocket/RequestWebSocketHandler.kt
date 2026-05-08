@@ -12,7 +12,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 @Component
 class RequestWebSocketHandler(
     private val objectMapper: ObjectMapper
-) : TextWebSocketHandler() {
+) : TextWebSocketHandler(), RequestWebSocketApi {
 
     private val sessions = CopyOnWriteArrayList<WebSocketSession>()
 
@@ -24,7 +24,7 @@ class RequestWebSocketHandler(
         sessions.remove(session)
     }
 
-    fun broadcast(request: NewsRequest) {
+    override fun broadcast(request: NewsRequest) {
         val json = objectMapper.writeValueAsString(request)
         val message = TextMessage(json)
         sessions.filter { it.isOpen }.forEach { session ->

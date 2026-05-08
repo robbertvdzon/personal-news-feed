@@ -1,42 +1,35 @@
 package com.vdzon.newsfeedbackend.controller
 
+import com.vdzon.newsfeedbackend.api.RequestsApi
 import com.vdzon.newsfeedbackend.model.CreateRequestDto
 import com.vdzon.newsfeedbackend.model.NewsRequest
 import com.vdzon.newsfeedbackend.service.RequestService
 import org.springframework.http.HttpStatus
-import org.springframework.security.core.Authentication
-import org.springframework.web.bind.annotation.DeleteMapping
-import org.springframework.web.bind.annotation.GetMapping
-import org.springframework.web.bind.annotation.PathVariable
-import org.springframework.web.bind.annotation.PostMapping
-import org.springframework.web.bind.annotation.RequestBody
-import org.springframework.web.bind.annotation.RequestMapping
-import org.springframework.web.bind.annotation.ResponseStatus
+import org.springframework.http.ResponseEntity
+import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.web.bind.annotation.RestController
 
 @RestController
-@RequestMapping("/api/requests")
-class RequestController(private val requestService: RequestService) {
+class RequestController(private val requestService: RequestService) : RequestsApi {
 
-    @GetMapping
-    fun getAll(auth: Authentication): List<NewsRequest> = requestService.getAll(auth.name)
+    private val username get() = SecurityContextHolder.getContext().authentication!!.name
 
-    @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
-    fun create(auth: Authentication, @RequestBody dto: CreateRequestDto): NewsRequest =
-        requestService.create(auth.name, dto)
+    override fun getRequests(): ResponseEntity<List<NewsRequest>> =
+        ResponseEntity.ok(requestService.getAll(username))
 
-    @DeleteMapping("/{id}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    fun delete(auth: Authentication, @PathVariable id: String) =
-        requestService.delete(auth.name, id)
+    override fun createRequest(createRequestDto: CreateRequestDto): ResponseEntity<NewsRequest> =
+        ResponseEntity.status(HttpStatus.CREATED).body(requestService.create(username, createRequestDto))
 
-    @PostMapping("/{id}/rerun")
-    fun rerun(auth: Authentication, @PathVariable id: String): NewsRequest =
-        requestService.rerun(auth.name, id)
+    override fun deleteRequest(id: String): ResponseEntity<Unit> {
+        requestService.delete(username, id)
+        return ResponseEntity.noContent().build()
+    }
 
-    @PostMapping("/{id}/cancel")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    fun cancel(auth: Authentication, @PathVariable id: String) =
-        requestService.cancel(auth.name, id)
+    override fun rerunRequest(id: String): ResponseEntity<NewsRequest> =
+        ResponseEntity.ok(requestService.rerun(username, id))
+
+    override fun cancelRequest(id: String): ResponseEntity<Unit> {
+        requestService.cancel(username, id)
+        return ResponseEntity.noContent().build()
+    }
 }

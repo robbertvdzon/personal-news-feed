@@ -1,25 +1,20 @@
 package com.vdzon.newsfeedbackend.controller
 
+import com.vdzon.newsfeedbackend.api.AuthApi
 import com.vdzon.newsfeedbackend.model.AuthRequest
 import com.vdzon.newsfeedbackend.model.AuthResponse
 import com.vdzon.newsfeedbackend.service.AuthService
 import org.springframework.http.HttpStatus
-import org.springframework.web.bind.annotation.PostMapping
-import org.springframework.web.bind.annotation.RequestBody
-import org.springframework.web.bind.annotation.RequestMapping
-import org.springframework.web.bind.annotation.ResponseStatus
+import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
 
 @RestController
-@RequestMapping("/api/auth")
-class AuthController(private val authService: AuthService) {
+class AuthController(private val authService: AuthService) : AuthApi {
 
-    @PostMapping("/register")
-    @ResponseStatus(HttpStatus.CREATED)
-    fun register(@RequestBody request: AuthRequest): AuthResponse =
-        authService.register(request.username, request.password)
+    override fun register(authRequest: AuthRequest): ResponseEntity<AuthResponse> =
+        ResponseEntity.status(HttpStatus.CREATED)
+            .body(authService.register(authRequest.username, authRequest.password))
 
-    @PostMapping("/login")
-    fun login(@RequestBody request: AuthRequest): AuthResponse =
-        authService.login(request.username, request.password)
+    override fun login(authRequest: AuthRequest): ResponseEntity<AuthResponse> =
+        ResponseEntity.ok(authService.login(authRequest.username, authRequest.password))
 }

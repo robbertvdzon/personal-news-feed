@@ -45,6 +45,7 @@ paths:
   /api/auth/register:
     post:
       tags: [Auth]
+      operationId: register
       summary: Registreer een nieuwe gebruiker
       security: []
       requestBody:
@@ -68,6 +69,7 @@ paths:
   /api/auth/login:
     post:
       tags: [Auth]
+      operationId: login
       summary: Log in en ontvang een JWT token
       security: []
       requestBody:
@@ -91,6 +93,7 @@ paths:
   /api/settings:
     get:
       tags: [Settings]
+      operationId: getSettings
       summary: Haal categorie-instellingen op
       description: |
         Geeft de categorie-instellingen terug. Als er nog geen instellingen zijn
@@ -107,6 +110,7 @@ paths:
                   $ref: '#/components/schemas/CategorySettings'
     put:
       tags: [Settings]
+      operationId: saveSettings
       summary: Sla categorie-instellingen op
       description: |
         Systeemcategorieën worden altijd toegevoegd als ze ontbreken in de opgegeven lijst.
@@ -133,6 +137,7 @@ paths:
   /api/rss-feeds:
     get:
       tags: [RSS Feeds]
+      operationId: getRssFeeds
       summary: Haal geconfigureerde RSS-feed URLs op
       responses:
         '200':
@@ -143,6 +148,7 @@ paths:
                 $ref: '#/components/schemas/RssFeedsSettings'
     put:
       tags: [RSS Feeds]
+      operationId: saveRssFeeds
       summary: Sla RSS-feed URLs op
       requestBody:
         required: true
@@ -163,6 +169,7 @@ paths:
   /api/rss:
     get:
       tags: [RSS Items]
+      operationId: getRssItems
       summary: Haal alle RSS-items op
       description: Gesorteerd op timestamp aflopend.
       responses:
@@ -178,6 +185,7 @@ paths:
   /api/rss/refresh:
     post:
       tags: [RSS Items]
+      operationId: refreshRss
       summary: Trigger handmatig een dagelijkse update
       description: |
         Start asynchroon de RSS-fetch en AI-verwerkingspipeline.
@@ -194,6 +202,7 @@ paths:
   /api/rss/cleanup:
     delete:
       tags: [RSS Items]
+      operationId: cleanupRss
       summary: Verwijder oude RSS-items
       parameters:
         - name: olderThanDays
@@ -231,6 +240,7 @@ paths:
   /api/rss/{id}/read:
     put:
       tags: [RSS Items]
+      operationId: markRssRead
       summary: Markeer RSS-item als gelezen
       parameters:
         - $ref: '#/components/parameters/ItemId'
@@ -245,6 +255,7 @@ paths:
   /api/rss/{id}/unread:
     put:
       tags: [RSS Items]
+      operationId: markRssUnread
       summary: Markeer RSS-item als ongelezen
       parameters:
         - $ref: '#/components/parameters/ItemId'
@@ -259,6 +270,7 @@ paths:
   /api/rss/{id}/star:
     put:
       tags: [RSS Items]
+      operationId: toggleRssStar
       summary: Toggle ster op RSS-item
       description: Werkt ook de onderwerp-geschiedenis bij.
       parameters:
@@ -274,6 +286,7 @@ paths:
   /api/rss/{id}/feedback:
     put:
       tags: [RSS Items]
+      operationId: setRssFeedback
       summary: Sla like/dislike feedback op voor een RSS-item
       description: Werkt ook de onderwerp-geschiedenis bij.
       parameters:
@@ -295,6 +308,7 @@ paths:
   /api/rss/{id}:
     delete:
       tags: [RSS Items]
+      operationId: deleteRssItem
       summary: Verwijder een RSS-item
       parameters:
         - $ref: '#/components/parameters/ItemId'
@@ -311,6 +325,7 @@ paths:
   /api/feed:
     get:
       tags: [Feed Items]
+      operationId: getFeedItems
       summary: Haal alle feed-items op
       description: |
         Gesorteerd op createdAt aflopend. Bevat ook de dagelijkse
@@ -328,6 +343,7 @@ paths:
   /api/feed/cleanup:
     delete:
       tags: [Feed Items]
+      operationId: cleanupFeed
       summary: Verwijder oude feed-items
       parameters:
         - name: olderThanDays
@@ -361,6 +377,7 @@ paths:
   /api/feed/{id}/read:
     put:
       tags: [Feed Items]
+      operationId: markFeedRead
       summary: Markeer feed-item als gelezen
       parameters:
         - $ref: '#/components/parameters/ItemId'
@@ -375,6 +392,7 @@ paths:
   /api/feed/{id}/unread:
     put:
       tags: [Feed Items]
+      operationId: markFeedUnread
       summary: Markeer feed-item als ongelezen
       parameters:
         - $ref: '#/components/parameters/ItemId'
@@ -389,6 +407,7 @@ paths:
   /api/feed/{id}/star:
     put:
       tags: [Feed Items]
+      operationId: toggleFeedStar
       summary: Toggle ster op feed-item
       description: Werkt ook de onderwerp-geschiedenis bij.
       parameters:
@@ -404,6 +423,7 @@ paths:
   /api/feed/{id}/feedback:
     put:
       tags: [Feed Items]
+      operationId: setFeedFeedback
       summary: Sla like/dislike feedback op voor een feed-item
       description: Werkt ook de onderwerp-geschiedenis bij.
       parameters:
@@ -425,6 +445,7 @@ paths:
   /api/feed/{id}:
     delete:
       tags: [Feed Items]
+      operationId: deleteFeedItem
       summary: Verwijder een feed-item
       parameters:
         - $ref: '#/components/parameters/ItemId'
@@ -441,6 +462,7 @@ paths:
   /api/requests:
     get:
       tags: [Requests]
+      operationId: getRequests
       summary: Haal alle verzoeken op
       responses:
         '200':
@@ -453,6 +475,7 @@ paths:
                   $ref: '#/components/schemas/NewsRequest'
     post:
       tags: [Requests]
+      operationId: createRequest
       summary: Maak een nieuw ad-hoc verzoek aan
       description: |
         Wordt direct asynchroon verwerkt. Statusupdates via WebSocket /ws/requests.
@@ -473,6 +496,7 @@ paths:
   /api/requests/{id}:
     delete:
       tags: [Requests]
+      operationId: deleteRequest
       summary: Verwijder een verzoek
       description: |
         Verzoeken met ID-prefix 'daily-update-' of 'daily-summary-' kunnen niet
@@ -486,6 +510,7 @@ paths:
   /api/requests/{id}/rerun:
     post:
       tags: [Requests]
+      operationId: rerunRequest
       summary: Herstart een verzoek
       description: Reset het verzoek naar PENDING en start verwerking opnieuw.
       parameters:
@@ -501,6 +526,7 @@ paths:
   /api/requests/{id}/cancel:
     post:
       tags: [Requests]
+      operationId: cancelRequest
       summary: Annuleer een actief verzoek
       description: |
         Als het verzoek PROCESSING is wordt de achtergrondtaak onderbroken
@@ -516,6 +542,7 @@ paths:
   /api/podcasts:
     get:
       tags: [Podcasts]
+      operationId: getPodcasts
       summary: Haal alle podcasts op
       description: scriptText is niet opgenomen in de lijstrespons.
       responses:
@@ -529,6 +556,7 @@ paths:
                   $ref: '#/components/schemas/Podcast'
     post:
       tags: [Podcasts]
+      operationId: createPodcast
       summary: Maak een nieuwe podcast aan
       description: |
         Start asynchroon de podcastgeneratie. Statusverloop:
@@ -550,6 +578,7 @@ paths:
   /api/podcasts/{id}:
     get:
       tags: [Podcasts]
+      operationId: getPodcast
       summary: Haal podcastdetail op
       description: Inclusief volledig scriptText.
       parameters:
@@ -565,6 +594,7 @@ paths:
           description: Niet gevonden
     delete:
       tags: [Podcasts]
+      operationId: deletePodcast
       summary: Verwijder een podcast
       description: Verwijdert ook het MP3-audiobestand.
       parameters:
@@ -576,6 +606,7 @@ paths:
   /api/podcasts/{id}/audio:
     get:
       tags: [Podcasts]
+      operationId: getPodcastAudio
       summary: Stream podcast audio als MP3
       parameters:
         - $ref: '#/components/parameters/ItemId'

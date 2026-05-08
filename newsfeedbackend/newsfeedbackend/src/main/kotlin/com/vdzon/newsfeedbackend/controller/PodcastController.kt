@@ -1,58 +1,43 @@
 package com.vdzon.newsfeedbackend.controller
 
+import com.vdzon.newsfeedbackend.api.PodcastsApi
+import com.vdzon.newsfeedbackend.model.CreatePodcastDto
 import com.vdzon.newsfeedbackend.model.Podcast
-import com.vdzon.newsfeedbackend.model.TtsProvider
 import com.vdzon.newsfeedbackend.service.PodcastService
 import org.springframework.core.io.FileSystemResource
 import org.springframework.core.io.Resource
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
-import org.springframework.security.core.Authentication
-import org.springframework.web.bind.annotation.DeleteMapping
-import org.springframework.web.bind.annotation.GetMapping
-import org.springframework.web.bind.annotation.PathVariable
-import org.springframework.web.bind.annotation.PostMapping
-import org.springframework.web.bind.annotation.RequestBody
-import org.springframework.web.bind.annotation.RequestMapping
-import org.springframework.web.bind.annotation.ResponseStatus
+import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.web.bind.annotation.RestController
 
 @RestController
-@RequestMapping("/api/podcasts")
-class PodcastController(private val podcastService: PodcastService) {
+class PodcastController(private val podcastService: PodcastService) : PodcastsApi {
 
-    @GetMapping
-    fun getAll(auth: Authentication): List<Podcast> = podcastService.getAll(auth.name)
+    private val username get() = SecurityContextHolder.getContext().authentication!!.name
 
-    @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
-    fun create(
-        @RequestBody body: Map<String, Any>,
-        auth: Authentication
-    ): Podcast {
-        val periodDays = (body["periodDays"] as? Number)?.toInt() ?: 7
-        val durationMinutes = (body["durationMinutes"] as? Number)?.toInt() ?: 10
-        @Suppress("UNCHECKED_CAST")
-        val customTopics = (body["customTopics"] as? List<*>)
-            ?.filterIsInstance<String>()
-            ?.filter { it.isNotBlank() }
-            ?: emptyList()
-        val ttsProvider = try {
-            TtsProvider.valueOf((body["ttsProvider"] as? String)?.uppercase() ?: "OPENAI")
-        } catch (_: Exception) { TtsProvider.OPENAI }
-        return podcastService.create(auth.name, periodDays, durationMinutes, customTopics, ttsProvider)
-    }
+    override fun getPodcasts(): ResponseEntity<List<Podcast>> =
+        ResponseEntity.ok(podcastService.getAll(username))
 
-    @GetMapping("/{id}")
-    fun getById(@PathVariable id: String, auth: Authentication): ResponseEntity<Podcast> {
-        val podcast = podcastService.getById(auth.name, id) ?: return ResponseEntity.notFound().build()
+    override fun createPodcast(createPodcastDto: CreatePodcastDto): ResponseEntity<Podcast> =
+        ResponseEntity.status(HttpStatus.CREATED).body(
+            podcastService.create(
+                username,
+                createPodcastDto.periodDays,
+                createPodcastDto.durationMinutes,
+                createPodcastDto.customTopics,
+                createPodcastDto.ttsProvider
+            )
+        )
+
+    override fun getPodcast(id: String): ResponseEntity<Podcast> {
+        val podcast = podcastService.getById(username, id) ?: return ResponseEntity.notFound().build()
         return ResponseEntity.ok(podcast)
     }
 
-    @GetMapping("/{id}/audio")
-    fun getAudio(@PathVariable id: String, auth: Authentication): ResponseEntity<Resource> {
-        val file = podcastService.getAudioFile(auth.name, id)
+    override fun getPodcastAudio(id: String, token: String?, v: Int?): ResponseEntity<Resource> {
+        val file = podcastService.getAudioFile(username, id)
             ?: return ResponseEntity.notFound().build()
         return ResponseEntity.ok()
             .contentType(MediaType.parseMediaType("audio/mpeg"))
@@ -62,8 +47,8 @@ class PodcastController(private val podcastService: PodcastService) {
             .body(FileSystemResource(file))
     }
 
-    @DeleteMapping("/{id}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    fun delete(@PathVariable id: String, auth: Authentication) =
-        podcastService.delete(auth.name, id)
+    override fun deletePodcast(id: String): ResponseEntity<Unit> {
+        podcastService.delete(username, id)
+        return ResponseEntity.noContent().build()
+    }
 }
