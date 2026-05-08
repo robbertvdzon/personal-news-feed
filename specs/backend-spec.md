@@ -16,7 +16,15 @@ De backend is een **persoonlijke nieuwsfeed-service** die:
 
 **Stack:** REST API + WebSocket, JSON opslag op schijf (geen database), JWT authenticatie, asynchrone achtergrondverwerking.
 
-**Taal/platform:** Spring Boot (Kotlin), poort 8080.
+**Taal/platform:** Spring Boot **4.x**, Kotlin **2.x**, poort 8080.
+
+**Build tool:** Maven (`pom.xml`).
+
+**Belangrijke dependency-details:**
+- Jackson 3.x via groupId `tools.jackson` (niet `com.fasterxml.jackson` — Spring Boot 4 gebruikt een andere groupId)
+- JWT: `io.jsonwebtoken:jjwt-api` / `jjwt-impl` / `jjwt-jackson` (JJWT bibliotheek)
+- RSS parsing: Rome bibliotheek (`com.rometools:rome`)
+- Spring WebSocket (niet WebFlux): `spring-boot-starter-websocket`
 
 ---
 
@@ -51,6 +59,8 @@ data/
 ## 3. Authenticatie
 
 **Mechanisme:** JWT Bearer token (HS256), geldig 30 dagen. Alle endpoints vereisen een geldig token in de `Authorization: Bearer {token}` header, behalve `/api/auth/**` en `/ws/**`.
+
+**Uitzondering — audio endpoint:** `GET /api/podcasts/{id}/audio` accepteert het JWT token ook als query-parameter `?token=...`. Dit is nodig omdat browser mediaplayers en Flutter's `AudioPlayer` geen `Authorization` header kunnen meesturen bij het streamen van audio. De JWT-filter moet deze query-parameter herkennen en als geldig authenticatiemiddel beschouwen.
 
 **Wachtwoord:** BCrypt gehasht. Minimale lengte: 4 tekens.
 
@@ -262,7 +272,7 @@ Wordt elk uur automatisch uitgevoerd voor elke gebruiker. Handmatig te triggeren
 2. Filter artikelen waarvan de URL al bekend is in de opgeslagen RssItems.
 3. Voor elk nieuw artikel: vraag Claude om een Nederlandse samenvatting (150-250 woorden), categorie-toewijzing en 2-3 canonieke onderwerpen.
 4. Sla alle nieuwe RssItems op (`inFeed: false`).
-5. Vraag Claude in één batch-aanroep om per artikel te bepalen of het in de feed hoort. Er is geen minimum of maximum percentage — als niets interessant genoeg is selecteert Claude niets, als alles interessant is selecteert Claude alles. Context meegegeven: eerder gelikete/gedislikete items, onderwerp-geschiedenis, bestaande feed-items (exclusief dagelijkse samenvattingen).
+5. Vraag Claude in één batch-aanroep om per artikel te bepalen of het in de feed hoort (maximaal ~50 artikelen per aanroep; bij meer artikelen worden ze opgesplitst in batches). Er is geen minimum of maximum percentage — als niets interessant genoeg is selecteert Claude niets, als alles interessant is selecteert Claude alles. Context meegegeven: eerder gelikete/gedislikete items, onderwerp-geschiedenis, bestaande feed-items (exclusief dagelijkse samenvattingen).
 6. Update `inFeed` en `feedReason` op de geselecteerde RssItems.
 7. Voor elk geselecteerd item: vraag Claude om een uitgebreide Nederlandse FeedItem-samenvatting (400-600 woorden).
 8. Sla FeedItems op en koppel `feedItemId` terug op de RssItems.
@@ -386,7 +396,7 @@ Deze geschiedenis wordt als context meegegeven aan Claude bij:
 
 | Endpoint | Doel | Input | Output |
 |---|---|---|---|
-| `POST /search` | Zoek artikelen op onderwerp | Zoekopdracht (Engels, 4-8 woorden), max_results, days, optioneel domeinfilter | Lijst van {title, url, snippet, publishedDate} |
+| `POST /search` | Zoek artikelen op onderwerp | Zoekopdracht (Engels, 4-8 woorden, afgeleid van het `subject` veld via Claude of directe vertaling), max_results, days, optioneel domeinfilter | Lijst van {title, url, snippet, publishedDate} |
 | `POST /extract` | Haal volledige artikeltekst op | Lijst van URLs | Map van {url → volledige tekst, max 8000 tekens} |
 
 Tavily wordt **alleen** gebruikt voor ad-hoc verzoeken (`POST /api/requests`), niet voor de reguliere RSS-pipeline.
